@@ -1,10 +1,8 @@
-using System;
 using System.Collections.Generic;
-using System.Runtime.InteropServices;
 using UnityEngine;
 using VRM;
 using UniVRM10;
-using System.Diagnostics;
+using Kirurobo;
 
 public class AvatarGravityController : MonoBehaviour
 {
@@ -16,18 +14,16 @@ public class AvatarGravityController : MonoBehaviour
     public bool showDebugForce = true;
     public Color debugColor = Color.cyan;
 
-    private Vector2Int previousWindowPos;
+    private Vector2 previousWindowPos;
     private Vector3 currentForce;
 
     private List<VRMSpringBone> springBones = new();
     private List<VRM10SpringBoneJoint> springBoneJoints = new();
     private Vrm10Instance vrm10Instance;
-    private IntPtr unityHWND;
 
     void Start()
     {
         previousWindowPos = GetWindowPosition();
-        unityHWND = Process.GetCurrentProcess().MainWindowHandle;
 
         // VRM0 spring bones
         springBones.AddRange(GetComponentsInChildren<VRMSpringBone>(true));
@@ -41,10 +37,10 @@ public class AvatarGravityController : MonoBehaviour
 
     void Update()
     {
-        Vector2Int currentWindowPos = GetWindowPosition();
-        Vector2Int delta = currentWindowPos - previousWindowPos;
+        Vector2 currentWindowPos = GetWindowPosition();
+        Vector2 delta = currentWindowPos - previousWindowPos;
 
-        if (delta != Vector2Int.zero)
+        if (delta.sqrMagnitude > 0.01f)
         {
             Vector3 impact = new Vector3(-delta.x, delta.y, 0).normalized * impactMultiplier;
             currentForce = impact;
@@ -87,22 +83,10 @@ public class AvatarGravityController : MonoBehaviour
         Gizmos.DrawSphere(transform.position + currentForce, 0.02f);
     }
 
-    #region Windows API
-
-    private Vector2Int GetWindowPosition()
+    private Vector2 GetWindowPosition()
     {
-        GetWindowRect(unityHWND, out RECT rect);
-        return new Vector2Int(rect.left, rect.top);
+        var uwc = UniWindowController.current;
+        if (uwc == null) return Vector2.zero;
+        return uwc.windowPosition;
     }
-
-    [DllImport("user32.dll")]
-    private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct RECT
-    {
-        public int left, top, right, bottom;
-    }
-
-    #endregion
 }

@@ -5,74 +5,52 @@ namespace Utils
 {
     public static partial class TrayIcon
     {
-        private static class WinAPI
+        private static class NativePlugin
         {
-            // Shell
-            [DllImport("shell32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-            public static extern bool Shell_NotifyIcon(uint dwMessage, [In] ref NOTIFYICONDATA lpData);
+            [DllImport("MacStatusBar")]
+            public static extern void MacStatusBar_Init(string tooltip);
 
+            [DllImport("MacStatusBar")]
+            public static extern void MacStatusBar_SetIcon(byte[] rgbaPixels, int width, int height);
 
-            // User32 - Windows, Messages, Menus, Icons
-            [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-            public static extern ushort RegisterClassEx([In] ref WNDCLASSEX lpwcx);
+            [DllImport("MacStatusBar")]
+            public static extern void MacStatusBar_SetTooltip(string tooltip);
 
-            [DllImport("user32.dll", SetLastError = true)]
-            public static extern bool DestroyWindow(IntPtr hWnd);
+            [DllImport("MacStatusBar")]
+            public static extern void MacStatusBar_RegisterMenuCallback(MenuClickDelegate callback);
 
-            [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-            public static extern bool UnregisterClass(string lpClassName, IntPtr hInstance);
+            [DllImport("MacStatusBar")]
+            public static extern void MacStatusBar_RegisterClickCallback(StatusBarClickDelegate callback);
 
-            [DllImport("user32.dll")]
-            public static extern IntPtr DefWindowProc(IntPtr hWnd, uint uMsg, IntPtr wParam, IntPtr lParam);
+            [DllImport("MacStatusBar")]
+            public static extern void MacStatusBar_ClearMenu();
 
-            [DllImport("user32.dll", SetLastError = true)]
-            public static extern bool DestroyIcon(IntPtr hIcon);
+            [DllImport("MacStatusBar")]
+            public static extern void MacStatusBar_AddMenuItem(string label, int itemId);
 
-            [DllImport("user32.dll", SetLastError = true)]
-            public static extern IntPtr CreatePopupMenu();
+            [DllImport("MacStatusBar")]
+            public static extern void MacStatusBar_AddSeparator();
 
-            [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-            public static extern bool AppendMenu(IntPtr hMenu, uint uFlags, uint uIDNewItem, string lpNewItem);
+            [DllImport("MacStatusBar")]
+            public static extern void MacStatusBar_ShowMenu();
 
-            [DllImport("user32.dll")]
-            public static extern uint TrackPopupMenuEx(IntPtr hMenu, uint uFlags, int x, int y, IntPtr hWnd, IntPtr lpTPMParams); //hWnd must own menu
+            [DllImport("MacStatusBar")]
+            public static extern void MacStatusBar_Destroy();
 
-            [DllImport("user32.dll", SetLastError = true)]
-            public static extern bool DestroyMenu(IntPtr hMenu);
+            [DllImport("MacStatusBar")]
+            public static extern void MacStatusBar_SetDockVisible(int visible);
 
-            [DllImport("user32.dll")]
-            public static extern bool GetCursorPos(out POINT lpPoint);
+            [DllImport("MacStatusBar")]
+            public static extern int MacStatusBar_IsDockVisible();
 
-            [DllImport("user32.dll")]
-            public static extern bool SetForegroundWindow(IntPtr hWnd);
-
-            [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-            public static extern IntPtr GetModuleHandle(string lpModuleName);
-
-            [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-            public static extern IntPtr CreateWindowEx(
-                uint dwExStyle, string lpClassName, string lpWindowName,
-                uint dwStyle, int x, int y, int nWidth, int nHeight,
-                IntPtr hWndParent, IntPtr hMenu, IntPtr hInstance, IntPtr lpParam
-            );
-
-
-            // GDI - Bitmaps, Icons
-            [DllImport("gdi32.dll", SetLastError = true)]
-            public static extern IntPtr CreateDIBSection(IntPtr hdc, [In] ref BITMAPINFO pbmi, uint iUsage, out IntPtr ppvBits, IntPtr hSection, uint dwOffset);
-
-            [DllImport("gdi32.dll")]
-            public static extern IntPtr CreateBitmap(int nWidth, int nHeight, uint cPlanes, uint cBitsPerPel, IntPtr lpvBits);
-
-            [DllImport("gdi32.dll")]
-            [return: MarshalAs(UnmanagedType.Bool)]
-            public static extern bool DeleteObject(IntPtr hObject);
-
-            [DllImport("user32.dll", SetLastError = true)]
-            public static extern IntPtr CreateIconIndirect([In] ref ICONINFO piconinfo);
+            [DllImport("MacStatusBar")]
+            public static extern void MacStatusBar_ShowNotification(string title, string message);
         }
 
-        // Delegate Definition
-        private delegate IntPtr WndProcDelegate(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        private delegate void MenuClickDelegate(int itemId);
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        private delegate void StatusBarClickDelegate(int clickType);
     }
 }

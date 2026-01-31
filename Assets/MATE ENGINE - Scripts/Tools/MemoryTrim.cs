@@ -1,9 +1,6 @@
 using UnityEngine;
 using System.Collections;
-using System.Diagnostics;
 using System.Runtime;
-using System.Runtime.InteropServices;
-using System;
 
 public class MemoryTrim : MonoBehaviour
 {
@@ -26,7 +23,6 @@ public class MemoryTrim : MonoBehaviour
     {
         if (enableAutoTrim) TrimNow();
     }
-
 
     void Awake()
     {
@@ -66,18 +62,5 @@ public class MemoryTrim : MonoBehaviour
         System.GC.Collect(System.GC.MaxGeneration, System.GCCollectionMode.Forced, true, true);
         AsyncOperation op = Resources.UnloadUnusedAssets();
         while (!op.isDone) yield return null;
-        TrimWorkingSet();
     }
-
-    static void TrimWorkingSet()
-    {
-#if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
-        EmptyWorkingSet(Process.GetCurrentProcess().Handle);
-#endif
-    }
-
-#if UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN
-    [DllImport("psapi.dll")]
-    static extern bool EmptyWorkingSet(IntPtr hProcess);
-#endif
 }

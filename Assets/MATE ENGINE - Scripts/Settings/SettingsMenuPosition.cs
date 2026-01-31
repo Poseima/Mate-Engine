@@ -1,8 +1,7 @@
 using UnityEngine;
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
-using System.Runtime.InteropServices;
+using Kirurobo;
 
 public class SettingsMenuPosition : MonoBehaviour
 {
@@ -27,31 +26,12 @@ public class SettingsMenuPosition : MonoBehaviour
     [Header("Monitor refresh (sec)")]
     public float monitorRefreshInterval = 2f;
 
-    private IntPtr unityHWND;
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct RECT { public int left, top, right, bottom; }
-
-    private delegate bool MonitorEnumProc(IntPtr hMonitor, IntPtr hdcMonitor, ref RECT lprcMonitor, IntPtr dwData);
-
-    [DllImport("user32.dll")]
-    private static extern bool EnumDisplayMonitors(IntPtr hdc, IntPtr lprcClip, MonitorEnumProc lpfnEnum, IntPtr dwData);
-
-    [DllImport("user32.dll")]
-    private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
-
-    private readonly List<RECT> monitorRects = new List<RECT>();
-    private MonitorEnumProc enumProc;
-    private float checkTimer;
-    private float monitorTimer;
-    private bool lastAtRightEdge;
-    private bool initedEdge;
+    private float nextCheck;
+    private float nextMonitorRefresh;
+    private Rect currentMonitorRect;
 
     void Start()
     {
-        unityHWND = Process.GetCurrentProcess().MainWindowHandle;
-        enumProc = EnumProc;
-        RefreshMonitors();
         foreach (var menu in menus)
         {
             if (!menu.settingsMenu) continue;
@@ -63,76 +43,85 @@ public class SettingsMenuPosition : MonoBehaviour
 
     void Update()
     {
-        if (unityHWND == IntPtr.Zero) return;
+        if (Time.time < nextCheck) return;
+        nextCheck = Time.time + 1f / checkFPS;
 
-        monitorTimer += Time.unscaledDeltaTime;
-        if (monitorTimer >= Mathf.Max(0.1f, monitorRefreshInterval))
+        if (!UniWindowController.current) return;
+
+        Vector2 winPos = UniWindowController.current.windowPosition;
+        Vector2 winSize = UniWindowController.current.windowSize;
+
+        // Periodically refresh which monitor the window is on
+        if (Time.time >= nextMonitorRefresh)
         {
-            monitorTimer = 0f;
-            RefreshMonitors();
+            nextMonitorRefresh = Time.time + monitorRefreshInterval;
+            currentMonitorRect = FindMonitorForWindow(winPos, winSize);
         }
 
-        checkTimer += Time.unscaledDeltaTime;
-        float step = 1f / Mathf.Max(1f, checkFPS);
-        if (checkTimer < step) return;
-        checkTimer = 0f;
+        // If we never found a valid monitor, skip
+        if (currentMonitorRect.width <= 0) return;
 
-        RECT winRect;
-        if (!GetWindowRect(unityHWND, out winRect)) return;
+        float winLeft = winPos.x;
+        float winRight = winPos.x + winSize.x;
+        float monLeft = currentMonitorRect.x;
+        float monRight = currentMonitorRect.x + currentMonitorRect.width;
 
-        RECT screen = monitorRects.Count > 0 ? GetBestMonitor(winRect) : new RECT { left = 0, top = 0, right = Screen.currentResolution.width, bottom = Screen.currentResolution.height };
+        bool nearRightEdge = (monRight - winRight) < edgeMargin;
+        bool nearLeftEdge = (winLeft - monLeft) < edgeMargin;
 
-        bool atRightEdge = winRect.right >= (screen.right - edgeMargin);
-        if (!initedEdge) { lastAtRightEdge = atRightEdge; initedEdge = true; }
-
-        if (atRightEdge != lastAtRightEdge)
+        foreach (var menu in menus)
         {
-            lastAtRightEdge = atRightEdge;
-            for (int i = 0; i < menus.Count; i++)
+            if (!menu.settingsMenu) continue;
+
+            float targetX;
+
+            if (nearRightEdge)
             {
-                var m = menus[i];
-                if (!m.settingsMenu) continue;
-                Vector2 target = new Vector2(atRightEdge ? -m.originalX : m.originalX, m.originalY);
-                if (m.lastApplied != target)
-                {
-                    m.settingsMenu.anchoredPosition = target;
-                    m.lastApplied = target;
-                }
+                // Window near right edge — flip menu to the left side
+                targetX = -Mathf.Abs(menu.originalX);
+            }
+            else if (nearLeftEdge)
+            {
+                // Window near left edge — flip menu to the right side
+                targetX = Mathf.Abs(menu.originalX);
+            }
+            else
+            {
+                targetX = menu.originalX;
+            }
+
+            Vector2 newPos = new Vector2(targetX, menu.originalY);
+
+            if (newPos != menu.lastApplied)
+            {
+                menu.settingsMenu.anchoredPosition = newPos;
+                menu.lastApplied = newPos;
             }
         }
     }
 
-    bool EnumProc(IntPtr hMonitor, IntPtr hdc, ref RECT lprc, IntPtr data)
+    /// <summary>
+    /// Find which monitor contains the center of the window.
+    /// Falls back to the first monitor if none match.
+    /// </summary>
+    private Rect FindMonitorForWindow(Vector2 winPos, Vector2 winSize)
     {
-        monitorRects.Add(lprc);
-        return true;
-    }
+        int monitorCount = UniWindowController.GetMonitorCount();
+        if (monitorCount <= 0) return new Rect();
 
-    void RefreshMonitors()
-    {
-        monitorRects.Clear();
-        EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, enumProc, IntPtr.Zero);
-    }
+        Vector2 windowCenter = winPos + winSize * 0.5f;
 
-    RECT GetBestMonitor(RECT win)
-    {
-        int idx = 0, maxArea = 0;
-        for (int i = 0; i < monitorRects.Count; i++)
+        for (int i = 0; i < monitorCount; i++)
         {
-            int a = OverlapArea(win, monitorRects[i]);
-            if (a > maxArea) { maxArea = a; idx = i; }
+            Rect monRect = UniWindowController.GetMonitorRect(i);
+            if (windowCenter.x >= monRect.x && windowCenter.x < monRect.x + monRect.width &&
+                windowCenter.y >= monRect.y && windowCenter.y < monRect.y + monRect.height)
+            {
+                return monRect;
+            }
         }
-        return monitorRects[idx];
-    }
 
-    int OverlapArea(RECT a, RECT b)
-    {
-        int x1 = Math.Max(a.left, b.left);
-        int x2 = Math.Min(a.right, b.right);
-        int y1 = Math.Max(a.top, b.top);
-        int y2 = Math.Min(a.bottom, b.bottom);
-        int w = x2 - x1;
-        int h = y2 - y1;
-        return (w > 0 && h > 0) ? w * h : 0;
+        // Fallback to primary monitor
+        return UniWindowController.GetMonitorRect(0);
     }
 }

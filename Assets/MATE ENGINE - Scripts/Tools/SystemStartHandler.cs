@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using UnityEngine;
 using UnityEngine.UI;
@@ -16,6 +16,8 @@ public class SystemStartHandler : MonoBehaviour
     public string commandLineArgs = "";
 
     private bool _isApplyingUI;
+    private string _plistPath;
+    private string _plistLabel;
 
     private void Awake()
     {
@@ -25,6 +27,10 @@ public class SystemStartHandler : MonoBehaviour
             enabled = false;
             return;
         }
+
+        string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        _plistLabel = "com.mateengine." + runKeyName.ToLowerInvariant();
+        _plistPath = Path.Combine(home, "Library", "LaunchAgents", _plistLabel + ".plist");
     }
 
     private void Start()
@@ -33,7 +39,7 @@ public class SystemStartHandler : MonoBehaviour
             autoStartToggle.onValueChanged.AddListener(OnUIToggleChanged);
 
         LoadFromSaveWithoutNotify();
-        TryApplyRegistry(SaveLoadHandler.Instance.data.startWithWindows);
+        TryApplyAutostart(SaveLoadHandler.Instance.data.startWithWindows);
     }
 
     private void OnDestroy()
@@ -49,7 +55,7 @@ public class SystemStartHandler : MonoBehaviour
         SaveLoadHandler.Instance.data.startWithWindows = isOn;
         SaveLoadHandler.Instance.SaveToDisk();
 
-        TryApplyRegistry(isOn);
+        TryApplyAutostart(isOn);
         UpdateCheckmarkText(isOn);
     }
 
@@ -63,7 +69,7 @@ public class SystemStartHandler : MonoBehaviour
     {
         SaveLoadHandler.Instance.data.startWithWindows = isOn;
         SaveLoadHandler.Instance.SaveToDisk();
-        TryApplyRegistry(isOn);
+        TryApplyAutostart(isOn);
         ApplyToUIWithoutNotify(isOn);
     }
 
@@ -95,86 +101,105 @@ public class SystemStartHandler : MonoBehaviour
     private void UpdateCheckmarkText(bool isOn)
     {
         if (checkmarkText != null)
-            checkmarkText.text = isOn ? "☑ Start with Windows" : "☐ Start with Windows";
+            checkmarkText.text = isOn ? "☑ Start at Login" : "☐ Start at Login";
     }
 
-    // ---------------- Registry Handling ----------------
-
-    private void TryApplyRegistry(bool enable)
+    private void TryApplyAutostart(bool enable)
     {
-#if UNITY_STANDALONE_WIN
-        if (Application.platform != RuntimePlatform.WindowsPlayer &&
-            Application.platform != RuntimePlatform.WindowsEditor)
+        if (string.IsNullOrEmpty(_plistPath))
         {
-            Debug.Log("[SystemStartHandler] Skipping registry (not on Windows).");
+            Debug.LogWarning("[SystemStartHandler] Plist path not initialized.");
             return;
         }
 
         try
         {
-            string exePath = GetCurrentExecutablePathQuoted();
-            if (string.IsNullOrEmpty(exePath))
+            if (enable)
             {
-                Debug.LogWarning("[SystemStartHandler] Executable path empty. Skipping registry write.");
-                return;
+                WriteLaunchAgentPlist();
+                Debug.Log($"[SystemStartHandler] Launch Agent created: {_plistPath}");
             }
-
-            string value = string.IsNullOrWhiteSpace(commandLineArgs)
-                ? exePath
-                : exePath + " " + commandLineArgs;
-
-            using (var key = global::Microsoft.Win32.Registry.CurrentUser.OpenSubKey(
-                       @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run", writable: true))
+            else
             {
-                if (key == null)
-                {
-                    Debug.LogError("[SystemStartHandler] HKCU Run key not found.");
-                    return;
-                }
-
-                if (enable)
-                {
-                    key.SetValue(runKeyName, value);
-                    Debug.Log($"[SystemStartHandler] Enabled autostart (HKCU) as '{runKeyName}' → {value}");
-                }
-                else
-                {
-                    key.DeleteValue(runKeyName, false);
-                    Debug.Log($"[SystemStartHandler] Disabled autostart (HKCU) for '{runKeyName}'.");
-                }
+                RemoveLaunchAgentPlist();
+                Debug.Log($"[SystemStartHandler] Launch Agent removed: {_plistPath}");
             }
         }
-        catch (Exception ex)
+        catch (Exception e)
         {
-            Debug.LogError("[SystemStartHandler] Registry write failed: " + ex.Message);
+            Debug.LogError($"[SystemStartHandler] Failed to {(enable ? "create" : "remove")} Launch Agent: {e.Message}");
         }
-#else
-        Debug.Log("[SystemStartHandler] Registry disabled on this platform.");
-#endif
     }
 
-    private string GetCurrentExecutablePathQuoted()
+    private void WriteLaunchAgentPlist()
     {
-#if UNITY_EDITOR
-        return string.Empty;
-#else
-        try
+        string appPath = GetAppBundlePath();
+        if (string.IsNullOrEmpty(appPath))
         {
-            // Safer way in builds: Application.dataPath → go up one folder
-            string exe = Path.Combine(Directory.GetParent(Application.dataPath).FullName,
-                                      Application.productName + ".exe");
-            if (File.Exists(exe))
-                return $"\"{exe}\"";
+            Debug.LogWarning("[SystemStartHandler] Could not determine .app bundle path.");
+            return;
+        }
 
-            // Fallback: try Process API
-            string proc = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName;
-            return string.IsNullOrEmpty(proc) ? string.Empty : $"\"{proc}\"";
-        }
-        catch (Exception ex)
+        // Ensure LaunchAgents directory exists
+        string dir = Path.GetDirectoryName(_plistPath);
+        if (!Directory.Exists(dir))
+            Directory.CreateDirectory(dir);
+
+        string argsXml = "";
+        if (!string.IsNullOrEmpty(commandLineArgs))
         {
-            Debug.LogWarning("[SystemStartHandler] Failed to get exe path: " + ex.Message);
-            return string.Empty;
+            string[] parts = commandLineArgs.Split(' ');
+            foreach (string part in parts)
+            {
+                if (!string.IsNullOrWhiteSpace(part))
+                    argsXml += $"\n        <string>{EscapeXml(part.Trim())}</string>";
+            }
         }
-#endif
+
+        string plist = $@"<?xml version=""1.0"" encoding=""UTF-8""?>
+<!DOCTYPE plist PUBLIC ""-//Apple//DTD PLIST 1.0//EN"" ""http://www.apple.com/DTDs/PropertyList-1.0.dtd"">
+<plist version=""1.0"">
+<dict>
+    <key>Label</key>
+    <string>{EscapeXml(_plistLabel)}</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/usr/bin/open</string>
+        <string>{EscapeXml(appPath)}</string>{argsXml}
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+</dict>
+</plist>";
+
+        File.WriteAllText(_plistPath, plist);
+    }
+
+    private void RemoveLaunchAgentPlist()
+    {
+        if (File.Exists(_plistPath))
+            File.Delete(_plistPath);
+    }
+
+    private string GetAppBundlePath()
+    {
+        // Application.dataPath on macOS: /path/to/App.app/Contents/Data
+        // Go up two levels to get the .app bundle
+        string dataPath = Application.dataPath;
+        string appPath = Path.GetFullPath(Path.Combine(dataPath, "../.."));
+
+        if (appPath.EndsWith(".app"))
+            return appPath;
+
+        // In editor, dataPath is the Assets folder — no .app bundle
+        Debug.LogWarning("[SystemStartHandler] Not running from an .app bundle.");
+        return null;
+    }
+
+    private static string EscapeXml(string s)
+    {
+        if (string.IsNullOrEmpty(s)) return "";
+        return s.Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;")
+                .Replace("\"", "&quot;").Replace("'", "&apos;");
     }
 }

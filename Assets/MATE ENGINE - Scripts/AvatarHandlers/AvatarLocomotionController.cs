@@ -1,7 +1,6 @@
 using System;
-using System.Diagnostics;
-using System.Runtime.InteropServices;
 using UnityEngine;
+using Kirurobo;
 
 public sealed class AvatarLocomotionController : MonoBehaviour
 {
@@ -51,66 +50,7 @@ public sealed class AvatarLocomotionController : MonoBehaviour
     public bool DrawBlockingDebug = true;
     [Range(0f, 1f)] public float DebugOverlayAlpha = 0.55f;
 
-    const uint SWP_NOSIZE = 0x0001;
-    const uint SWP_NOZORDER = 0x0004;
-    const uint SWP_NOACTIVATE = 0x0010;
-
-    const uint GW_OWNER = 4;
-
-    const uint MONITOR_DEFAULTTONEAREST = 2;
-
-    const int SM_XVIRTUALSCREEN = 76;
-    const int SM_CXVIRTUALSCREEN = 78;
-
-    [StructLayout(LayoutKind.Sequential)]
-    struct RECT
-    {
-        public int Left;
-        public int Top;
-        public int Right;
-        public int Bottom;
-    }
-
-    [StructLayout(LayoutKind.Sequential)]
-    struct POINT
-    {
-        public int X;
-        public int Y;
-    }
-
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
-    struct MONITORINFO
-    {
-        public int cbSize;
-        public RECT rcMonitor;
-        public RECT rcWork;
-        public uint dwFlags;
-    }
-
-    [DllImport("user32.dll")] static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
-    delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
-
-    [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr hWnd);
-    [DllImport("user32.dll")] static extern IntPtr GetWindow(IntPtr hWnd, uint uCmd);
-    [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
-    [DllImport("user32.dll")] static extern int GetSystemMetrics(int nIndex);
-
-    [DllImport("user32.dll", SetLastError = true)] static extern int GetWindowTextLength(IntPtr hWnd);
-    [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
-
-    [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
-
-    [DllImport("user32.dll")] static extern bool GetClientRect(IntPtr hWnd, out RECT lpRect);
-    [DllImport("user32.dll")] static extern bool ClientToScreen(IntPtr hWnd, ref POINT lpPoint);
-
-    [DllImport("user32.dll")] static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint dwFlags);
-    [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)] static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO lpmi);
-
     int _baseLayerIndex = 0;
-    IntPtr _hwnd = IntPtr.Zero;
 
     bool _walking;
     int _dir;
@@ -141,9 +81,6 @@ public sealed class AvatarLocomotionController : MonoBehaviour
 
     void Update()
     {
-#if !(UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN)
-        return;
-#else
         if (!EnableLocomotion)
         {
             StopWalking();
@@ -154,19 +91,6 @@ public sealed class AvatarLocomotionController : MonoBehaviour
         ResolveBoundsRenderersSmart(false);
 
         if (Animator == null) return;
-
-        if (_hwnd == IntPtr.Zero) CacheWindowHandle();
-        if (_hwnd == IntPtr.Zero) return;
-
-        if (OnlyMoveWhenFocused)
-        {
-            IntPtr fg = GetForegroundWindow();
-            if (fg != _hwnd)
-            {
-                if (_walking) StopWalking();
-                return;
-            }
-        }
 
         if (DebugTriggerWalkNow)
         {
@@ -210,7 +134,6 @@ public sealed class AvatarLocomotionController : MonoBehaviour
         }
 
         StepWalk();
-#endif
     }
 
     void OnGUI()
@@ -360,7 +283,7 @@ public sealed class AvatarLocomotionController : MonoBehaviour
         _boundsRenderers = root.GetComponentsInChildren<Renderer>(true);
     }
 
-    void RefreshLayerIndex()
+    public void RefreshLayerIndex()
     {
         if (Animator == null) return;
         int idx = Animator.GetLayerIndex(BaseLayerName);
@@ -373,7 +296,7 @@ public sealed class AvatarLocomotionController : MonoBehaviour
         return s.IsName(BaseIdleStateName);
     }
 
-    void ForceStartWalk()
+    public void ForceStartWalk()
     {
         StopWalking();
         _pauseUntil = 0f;
@@ -441,65 +364,45 @@ public sealed class AvatarLocomotionController : MonoBehaviour
     void StepWalk()
     {
         if (!_walking) return;
+        var uwc = UniWindowController.current;
+        if (uwc == null) { EndWalk(); return; }
 
-        if (!GetWindowRect(_hwnd, out RECT r))
+        Vector2 winPos = uwc.windowPosition;
+        Vector2 winSize = uwc.windowSize;
+        int w = Mathf.RoundToInt(winSize.x);
+
+        if (!TryGetMonitorBounds(out int monitorLeft, out int monitorRight))
         {
-            StopWalking();
-            ScheduleNextDecision(false);
-            return;
+            monitorLeft = 0;
+            monitorRight = Screen.currentResolution.width;
         }
 
-        int w = r.Right - r.Left;
-
-        if (!TryGetMonitorBounds(_hwnd, out int monitorLeft, out int monitorRight))
-        {
-            int vx = GetSystemMetrics(SM_XVIRTUALSCREEN);
-            int vw = GetSystemMetrics(SM_CXVIRTUALSCREEN);
-            monitorLeft = vx;
-            monitorRight = vx + vw;
-        }
-
-        int minX;
-        int maxX;
-
+        int minX, maxX;
         if (UseAvatarBoundsBlocking && TryGetBlockingInfo(out BlockingInfo bi))
         {
-            minX = bi.minWindowX;
-            maxX = bi.maxWindowX;
+            minX = bi.minWindowX; maxX = bi.maxWindowX;
         }
         else
         {
-            int minWinX = monitorLeft;
-            int maxWinX = monitorRight - w;
-            if (maxWinX < minWinX) maxWinX = minWinX;
-            minX = minWinX;
-            maxX = maxWinX;
+            minX = monitorLeft;
+            maxX = monitorRight - w;
+            if (maxX < minX) maxX = minX;
         }
 
         float speedPxPerSecond = Mathf.Max(0f, WindowSpeed) * 100f;
-        if (speedPxPerSecond <= 0.01f)
-        {
-            EndWalk();
-            return;
-        }
+        if (speedPxPerSecond <= 0.01f) { EndWalk(); return; }
 
         float step = speedPxPerSecond * Time.unscaledDeltaTime;
         float move = Mathf.Min(step, _remainingPixels);
 
-        int targetX = r.Left + Mathf.RoundToInt(move * _dir);
+        int currentX = Mathf.RoundToInt(winPos.x);
+        int targetX = currentX + Mathf.RoundToInt(move * _dir);
         int clampedX = Mathf.Clamp(targetX, minX, maxX);
 
-        int actualMoved = Mathf.Abs(clampedX - r.Left);
+        int actualMoved = Mathf.Abs(clampedX - currentX);
         _remainingPixels -= actualMoved;
 
-        int yKeep = r.Top;
-
-        if (!SetWindowPos(_hwnd, IntPtr.Zero, clampedX, yKeep, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE))
-        {
-            StopWalking();
-            ScheduleNextDecision(false);
-            return;
-        }
+        uwc.windowPosition = new Vector2(clampedX, winPos.y);
 
         if (actualMoved <= 0)
         {
@@ -507,8 +410,7 @@ public sealed class AvatarLocomotionController : MonoBehaviour
             _forcedNextDir = -_dir;
         }
 
-        if (_remainingPixels <= 0.01f)
-            EndWalk();
+        if (_remainingPixels <= 0.01f) EndWalk();
     }
 
     void EndWalk()
@@ -545,59 +447,38 @@ public sealed class AvatarLocomotionController : MonoBehaviour
         _nextDecisionTime = t + UnityEngine.Random.Range(baseDelay, baseDelay * 2f);
     }
 
-    void CacheWindowHandle()
-    {
-#if !(UNITY_STANDALONE_WIN || UNITY_EDITOR_WIN)
-        _hwnd = IntPtr.Zero;
-#else
-        uint pid = (uint)Process.GetCurrentProcess().Id;
-        IntPtr best = IntPtr.Zero;
-        long bestArea = -1;
+    /// <summary>Stub: no window handle on macOS. Phase 2 will use UniWinCore.</summary>
+    void CacheWindowHandle() { }
 
-        EnumWindows((hWnd, lParam) =>
+    bool TryGetMonitorBounds(out int left, out int right)
+    {
+        left = 0; right = 0;
+        var uwc = UniWindowController.current;
+        if (uwc == null) return false;
+        Vector2 winPos = uwc.windowPosition;
+        Vector2 winSize = uwc.windowSize;
+        float winCenterX = winPos.x + winSize.x * 0.5f;
+        float winCenterY = winPos.y + winSize.y * 0.5f;
+        int count = UniWindowController.GetMonitorCount();
+        for (int i = 0; i < count; i++)
         {
-            if (!IsWindowVisible(hWnd)) return true;
-            if (GetWindow(hWnd, GW_OWNER) != IntPtr.Zero) return true;
-
-            GetWindowThreadProcessId(hWnd, out uint wp);
-            if (wp != pid) return true;
-
-            int len = GetWindowTextLength(hWnd);
-            if (len <= 0) return true;
-
-            if (!GetWindowRect(hWnd, out RECT rr)) return true;
-
-            long area = (long)(rr.Right - rr.Left) * (long)(rr.Bottom - rr.Top);
-            if (area > bestArea)
+            Rect mr = UniWindowController.GetMonitorRect(i);
+            if (winCenterX >= mr.x && winCenterX < mr.x + mr.width &&
+                winCenterY >= mr.y && winCenterY < mr.y + mr.height)
             {
-                bestArea = area;
-                best = hWnd;
+                left = Mathf.RoundToInt(mr.x);
+                right = Mathf.RoundToInt(mr.x + mr.width);
+                return true;
             }
-
+        }
+        if (count > 0)
+        {
+            Rect mr = UniWindowController.GetMonitorRect(0);
+            left = Mathf.RoundToInt(mr.x);
+            right = Mathf.RoundToInt(mr.x + mr.width);
             return true;
-        }, IntPtr.Zero);
-
-        _hwnd = best;
-#endif
-    }
-
-    bool TryGetMonitorBounds(IntPtr hwnd, out int left, out int right)
-    {
-        left = 0;
-        right = 0;
-
-        IntPtr mon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
-        if (mon == IntPtr.Zero) return false;
-
-        MONITORINFO mi = new MONITORINFO();
-        mi.cbSize = Marshal.SizeOf(typeof(MONITORINFO));
-
-        if (!GetMonitorInfo(mon, ref mi))
-            return false;
-
-        left = mi.rcMonitor.Left;
-        right = mi.rcMonitor.Right;
-        return true;
+        }
+        return false;
     }
 
     struct BlockingInfo
@@ -617,37 +498,26 @@ public sealed class AvatarLocomotionController : MonoBehaviour
     bool TryGetBlockingInfo(out BlockingInfo bi)
     {
         bi = default;
-
-        if (_hwnd == IntPtr.Zero) return false;
-
+        var uwc = UniWindowController.current;
+        if (uwc == null) return false;
         Camera cam = BoundsCamera != null ? BoundsCamera : Camera.main;
         if (cam == null) return false;
 
-        if (!GetWindowRect(_hwnd, out RECT winRect))
-            return false;
+        Vector2 winPos = uwc.windowPosition;
+        Vector2 winSize = uwc.windowSize;
+        Vector2 clientSz = uwc.clientSize;
 
-        if (!GetClientRect(_hwnd, out RECT clientRect))
-            return false;
-
-        POINT pt = new POINT { X = 0, Y = 0 };
-        if (!ClientToScreen(_hwnd, ref pt))
-            return false;
-
-        int clientX = pt.X;
-
-        int clientW = clientRect.Right - clientRect.Left;
-        if (clientW <= 0) return false;
-        if (Screen.width <= 0 || Screen.height <= 0) return false;
+        int clientW = Mathf.RoundToInt(clientSz.x);
+        if (clientW <= 0 || Screen.width <= 0 || Screen.height <= 0) return false;
 
         float scaleX = clientW / (float)Screen.width;
 
-        if (!TryGetMonitorBounds(_hwnd, out int monitorLeft, out int monitorRight))
-        {
-            int vx = GetSystemMetrics(SM_XVIRTUALSCREEN);
-            int vw = GetSystemMetrics(SM_CXVIRTUALSCREEN);
-            monitorLeft = vx;
-            monitorRight = vx + vw;
-        }
+        // Client area offset from window position
+        float borderLeft = (winSize.x - clientSz.x) * 0.5f;
+        int clientX = Mathf.RoundToInt(winPos.x + borderLeft);
+
+        if (!TryGetMonitorBounds(out int monitorLeft, out int monitorRight))
+            return false;
 
         if (!TryGetAvatarScreenBoundsUnity(cam, out float minXU, out float maxXU))
         {
@@ -657,24 +527,18 @@ public sealed class AvatarLocomotionController : MonoBehaviour
 
         float effMinXU = Mathf.Clamp(minXU + BoundsInsetLeft, 0f, Screen.width);
         float effMaxXU = Mathf.Clamp(maxXU - BoundsInsetRight, 0f, Screen.width);
-
         if (effMaxXU < effMinXU)
         {
             float mid = (effMinXU + effMaxXU) * 0.5f;
-            effMinXU = mid;
-            effMaxXU = mid;
+            effMinXU = mid; effMaxXU = mid;
         }
-
-        int borderLeft = clientX - winRect.Left;
 
         int effMinGlobalX = clientX + Mathf.RoundToInt(effMinXU * scaleX);
         int effMaxGlobalX = clientX + Mathf.RoundToInt(effMaxXU * scaleX);
-
         int thrGlobal = Mathf.RoundToInt(EdgeThresholdUnityPixels * scaleX);
 
-        int minWindowX = monitorLeft - borderLeft - Mathf.RoundToInt(effMinXU * scaleX);
-        int maxWindowX = monitorRight - borderLeft - Mathf.RoundToInt(effMaxXU * scaleX);
-
+        int minWindowX = monitorLeft - Mathf.RoundToInt(borderLeft) - Mathf.RoundToInt(effMinXU * scaleX);
+        int maxWindowX = monitorRight - Mathf.RoundToInt(borderLeft) - Mathf.RoundToInt(effMaxXU * scaleX);
         if (maxWindowX < minWindowX) maxWindowX = minWindowX;
 
         bi.monitorLeft = monitorLeft;
@@ -687,7 +551,6 @@ public sealed class AvatarLocomotionController : MonoBehaviour
         bi.edgeThresholdGlobal = Mathf.Max(0, thrGlobal);
         bi.minWindowX = minWindowX;
         bi.maxWindowX = maxWindowX;
-
         return true;
     }
 

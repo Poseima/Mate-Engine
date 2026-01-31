@@ -1,5 +1,4 @@
 using UnityEngine;
-using System.Runtime.InteropServices;
 
 public class AvatarBigScreenScreenSaver : MonoBehaviour
 {
@@ -32,19 +31,6 @@ public class AvatarBigScreenScreenSaver : MonoBehaviour
     private Animator avatarAnimator;
     private Vector2 lastMousePos;
     private float idleTimer = 0f;
-
-    [DllImport("user32.dll")]
-    private static extern bool GetCursorPos(out POINT lpPoint);
-
-    [DllImport("user32.dll")]
-    private static extern short GetAsyncKeyState(int vKey);
-
-    [StructLayout(LayoutKind.Sequential)]
-    public struct POINT
-    {
-        public int X;
-        public int Y;
-    }
 
     void Start()
     {
@@ -185,19 +171,12 @@ public class AvatarBigScreenScreenSaver : MonoBehaviour
 
     Vector2 GetGlobalMousePosition()
     {
-        POINT point;
-        GetCursorPos(out point);
-        return new Vector2(point.X, point.Y);
+        return new Vector2(Input.mousePosition.x, Input.mousePosition.y);
     }
 
     bool IsAnyKeyPressed()
     {
-        for (int key = 0x08; key <= 0xFE; key++)
-        {
-            if ((GetAsyncKeyState(key) & 0x8000) != 0)
-                return true;
-        }
-        return false;
+        return Input.anyKey;
     }
 
     bool IsInAllowedState()
@@ -211,22 +190,10 @@ public class AvatarBigScreenScreenSaver : MonoBehaviour
         return false;
     }
 
-    private bool lastGlobalMouseDown = false;
     private bool IsGlobalUserInput()
     {
-        bool mouseDown = (GetAsyncKeyState(0x01) & 0x8000) != 0;
-        bool mouseClick = mouseDown && !lastGlobalMouseDown;
-        lastGlobalMouseDown = mouseDown;
-
-        bool keyPressed = false;
-        for (int key = 0x08; key <= 0xFE; key++)
-        {
-            if ((GetAsyncKeyState(key) & 0x8000) != 0)
-            {
-                keyPressed = true;
-                break;
-            }
-        }
+        bool mouseClick = Input.GetMouseButtonDown(0);
+        bool keyPressed = Input.anyKeyDown;
         return mouseClick || keyPressed;
     }
 

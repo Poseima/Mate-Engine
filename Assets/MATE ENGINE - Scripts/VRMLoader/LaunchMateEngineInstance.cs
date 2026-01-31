@@ -16,7 +16,7 @@ public class InstanceEntry
 public class LaunchMateEngineInstances : MonoBehaviour
 {
     [Header("Executable")]
-    public string executableName = "MateEngineX.exe";
+    public string executableName = "MateEngineX";
 
     [Header("Texts")]
     public string notRunningText = "Open Avatar {0}";
@@ -133,8 +133,13 @@ public class LaunchMateEngineInstances : MonoBehaviour
             return;
         }
 
-        string exePath = Path.GetFullPath(Path.Combine(Application.dataPath, $"../{executableName}"));
-        if (!File.Exists(exePath))
+        // On macOS, Application.dataPath is Contents/Data inside the .app bundle
+        // Go up to the .app level, then find the executable via open command
+        string exePath = Path.GetFullPath(Path.Combine(Application.dataPath, $"../../{executableName}.app"));
+        if (!Directory.Exists(exePath))
+            exePath = Path.GetFullPath(Path.Combine(Application.dataPath, $"../{executableName}"));
+        bool exeExists = Directory.Exists(exePath) || File.Exists(exePath);
+        if (!exeExists)
         {
             UnityEngine.Debug.LogError("[Launcher] Executable not found: " + exePath);
             return;
@@ -146,13 +151,26 @@ public class LaunchMateEngineInstances : MonoBehaviour
 
         try
         {
-            var startInfo = new ProcessStartInfo
+            ProcessStartInfo startInfo;
+            if (exePath.EndsWith(".app"))
             {
-                FileName = exePath,
-                Arguments = args,
-                UseShellExecute = false,
-                WorkingDirectory = Path.GetDirectoryName(exePath)
-            };
+                startInfo = new ProcessStartInfo
+                {
+                    FileName = "open",
+                    Arguments = $"-n \"{exePath}\" --args {args}",
+                    UseShellExecute = false
+                };
+            }
+            else
+            {
+                startInfo = new ProcessStartInfo
+                {
+                    FileName = exePath,
+                    Arguments = args,
+                    UseShellExecute = false,
+                    WorkingDirectory = Path.GetDirectoryName(exePath)
+                };
+            }
 
             var p = Process.Start(startInfo);
             if (p != null)

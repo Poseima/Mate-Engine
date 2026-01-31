@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Runtime.InteropServices;
 using UnityEngine;
 
 namespace Utils
@@ -8,40 +7,23 @@ namespace Utils
     public static partial class TrayIcon
     {
         private static bool _init = false;
-        private static string windowClassName;
-
-        private static NOTIFYICONDATA notifyIconData;
-        private static IntPtr hIcon;
-        private static IntPtr messageWindowHandle;
 
         private static Dictionary<string, Action> MenuActions;
-        private static Dictionary<uint, string> ActionMappings;
+        private static Dictionary<int, string> ItemIdToLabel;
         private static Action OnLeftClick;
 
-        private static WndProcDelegate wndProcDelegate;
         public static Func<List<(string, Action)>> OnBuildMenu;
 
+        // Must be kept alive to prevent GC of native callback
+        private static MenuClickDelegate _menuCallbackDelegate;
+        private static StatusBarClickDelegate _clickCallbackDelegate;
 
-        /// <summary>Create a System Tray Icon</summary>
-        /// <param name="appName">An internal classifier (not visible)</param>
-        /// <param name="tooltip">The string that shows up when hovering the icon</param>
-        /// <param name="iconTexture">The texture for the icon (16x16 is recommend)</param>
-        /// <param name="actions">List of menu items when clicking on the icon</param>
+        /// <summary>Create a menu bar status icon (macOS NSStatusBar)</summary>
         public static void Init(string appName, string tooltip, Texture2D iconTexture, List<(string, Action)> actions = null)
         {
-#if !UNITY_STANDALONE_WIN
-            throw new NotImplementedException("These features are only avaliable on Windows...");
-#endif
-
             if (_init)
             {
                 Debug.LogError("Init can only be called once...");
-                return;
-            }
-
-            if (string.IsNullOrEmpty(appName))
-            {
-                Debug.LogError("A title for the application is required...");
                 return;
             }
 
@@ -51,215 +33,156 @@ namespace Utils
                 return;
             }
 
-            if (iconTexture == null || !iconTexture.isReadable)
-            {
-                Debug.LogError("Texture2D with Read/Write permission is required...");
-                return;
-            }
-
-            // 0. Setup Environment
-            windowClassName = appName;
             ProcessMenuActions(actions);
 
-            // 1. Create HICON
-            hIcon = CreateHIconFromTexture2D(ref iconTexture);
-            if (hIcon == IntPtr.Zero)
+            try
             {
-                Debug.LogError("Failed to create icon...");
-                return;
-            }
+                // Initialize the native status bar
+                NativePlugin.MacStatusBar_Init(tooltip);
 
-            // 2. Create Hidden Window for Messages
-            bool success = CreateMessageWindow();
-            if (!success)
-            {
-                Debug.LogError("Failed to create message window");
-                CleanupResources();
-                return;
-            }
+                // Set icon from texture
+                if (iconTexture != null && iconTexture.isReadable)
+                {
+                    SetIconFromTexture(iconTexture);
+                }
 
-            // 3. Prepare NOTIFYICONDATA
-            notifyIconData = new NOTIFYICONDATA()
-            {
-                cbSize = (uint)Marshal.SizeOf(notifyIconData),
-                hWnd = messageWindowHandle,
-                uID = GetUniqueID(),
-                uFlags = NIF_ICON | NIF_TIP | NIF_MESSAGE,
-                uCallbackMessage = TRAY_ICON_MESSAGE,
-                hIcon = hIcon,
-                szTip = tooltip
-            };
+                // Register native callbacks (prevent GC)
+                _menuCallbackDelegate = OnNativeMenuClick;
+                _clickCallbackDelegate = OnNativeStatusBarClick;
+                NativePlugin.MacStatusBar_RegisterMenuCallback(_menuCallbackDelegate);
+                NativePlugin.MacStatusBar_RegisterClickCallback(_clickCallbackDelegate);
 
-            // 4. Add the icon
-            success = WinAPI.Shell_NotifyIcon(NIM_ADD, ref notifyIconData);
-            if (success)
-            {
                 _init = true;
-#if UNITY_EDITOR
-                Debug.Log("Successfully added System Tray Icon");
-#endif
                 Application.quitting += CleanupResources;
+
+#if UNITY_EDITOR
+                Debug.Log("Successfully added macOS Status Bar Icon");
+#endif
             }
-            else
+            catch (Exception e)
             {
-                Debug.LogError($"Failed to add system tray icon. Error: {Marshal.GetLastWin32Error()}");
-                CleanupResources();
-                return;
+                Debug.LogError($"Failed to initialize macOS status bar: {e.Message}");
             }
         }
 
-        private static bool CreateMessageWindow()
+        private static void SetIconFromTexture(Texture2D texture)
         {
-            IntPtr hInstance = WinAPI.GetModuleHandle(null);
-            if (hInstance == IntPtr.Zero) return false;
+            int width = texture.width;
+            int height = texture.height;
+            Color32[] pixels = texture.GetPixels32();
 
-            wndProcDelegate = new WndProcDelegate(WndProc);
-
-            var wc = new WNDCLASSEX()
+            // Convert to RGBA byte array (flip vertically for macOS coordinate system)
+            byte[] rgba = new byte[width * height * 4];
+            for (int y = 0; y < height; y++)
             {
-                cbSize = (uint)Marshal.SizeOf(typeof(WNDCLASSEX)),
-                lpszClassName = windowClassName,
-                lpfnWndProc = Marshal.GetFunctionPointerForDelegate(wndProcDelegate),
-                hInstance = hInstance,
-                style = 0,
-                hIcon = IntPtr.Zero,
-                hIconSm = IntPtr.Zero,
-                hCursor = IntPtr.Zero,
-                hbrBackground = IntPtr.Zero,
-                lpszMenuName = null,
-                cbClsExtra = 0,
-                cbWndExtra = 0
-            };
-
-            ushort classAtom = WinAPI.RegisterClassEx(ref wc);
-            if (classAtom == 0)
-            {
-                Debug.LogError($"RegisterClassEx Failed. Error: {Marshal.GetLastWin32Error()}");
-                return false;
+                int srcRow = (height - 1 - y);
+                for (int x = 0; x < width; x++)
+                {
+                    Color32 p = pixels[srcRow * width + x];
+                    int idx = (y * width + x) * 4;
+                    rgba[idx + 0] = p.r;
+                    rgba[idx + 1] = p.g;
+                    rgba[idx + 2] = p.b;
+                    rgba[idx + 3] = p.a;
+                }
             }
 
-            messageWindowHandle = WinAPI.CreateWindowEx(
-                0,
-                windowClassName,
-                windowClassName,
-                0,
-                0, 0, 0, 0,
-                HWND_MESSAGE,
-                IntPtr.Zero,
-                hInstance,
-                IntPtr.Zero
-            );
+            NativePlugin.MacStatusBar_SetIcon(rgba, width, height);
+        }
 
-            if (messageWindowHandle == IntPtr.Zero)
+        [AOT.MonoPInvokeCallback(typeof(MenuClickDelegate))]
+        private static void OnNativeMenuClick(int itemId)
+        {
+            if (ItemIdToLabel != null && ItemIdToLabel.TryGetValue(itemId, out string label))
             {
-                Debug.LogError($"CreateWindowEx Failed. Error: {Marshal.GetLastWin32Error()}");
-                WinAPI.UnregisterClass(windowClassName, hInstance);
-                return false;
+                if (MenuActions != null && MenuActions.TryGetValue(label, out Action callback))
+                {
+                    callback?.Invoke();
+                }
             }
+        }
 
-#if UNITY_EDITOR
-            Debug.Log("Successfully created Message Window");
-#endif
-            return true;
+        [AOT.MonoPInvokeCallback(typeof(StatusBarClickDelegate))]
+        private static void OnNativeStatusBarClick(int clickType)
+        {
+            if (clickType == 0) // left click
+            {
+                if (OnLeftClick != null)
+                {
+                    OnLeftClick.Invoke();
+                }
+                else
+                {
+                    // Default: show context menu on left click too
+                    ShowContextMenu();
+                }
+            }
+            else // right click
+            {
+                ShowContextMenu();
+            }
         }
 
         private static void ShowContextMenu()
         {
-            if (!WinAPI.GetCursorPos(out POINT pt))
-                return;
-
-            IntPtr hMenu = WinAPI.CreatePopupMenu();
-            if (hMenu == IntPtr.Zero) return;
-
             var menuEntries = OnBuildMenu != null ? OnBuildMenu() : null;
 
             MenuActions = new Dictionary<string, Action>();
-            ActionMappings = new Dictionary<uint, string>();
-            uint commandId = 1000;
+            ItemIdToLabel = new Dictionary<int, string>();
 
+            NativePlugin.MacStatusBar_ClearMenu();
+
+            int itemId = 1000;
             if (menuEntries != null)
             {
                 foreach (var entry in menuEntries)
                 {
-                    if (entry.Item1 == Utils.TrayIcon.SEPARATOR)
+                    if (entry.Item1 == SEPARATOR)
                     {
-                        WinAPI.AppendMenu(hMenu, MF_SEPARATOR, 0, null);
+                        NativePlugin.MacStatusBar_AddSeparator();
+                    }
+                    else if (entry.Item1 == LEFT_CLICK)
+                    {
+                        OnLeftClick = entry.Item2;
                     }
                     else
                     {
-                        WinAPI.AppendMenu(hMenu, MF_STRING, commandId, entry.Item1);
+                        NativePlugin.MacStatusBar_AddMenuItem(entry.Item1, itemId);
                         MenuActions[entry.Item1] = entry.Item2;
-                        ActionMappings[commandId] = entry.Item1;
-                        commandId++;
+                        ItemIdToLabel[itemId] = entry.Item1;
+                        itemId++;
                     }
                 }
             }
 
-            WinAPI.SetForegroundWindow(messageWindowHandle);
-            WinAPI.TrackPopupMenuEx(hMenu, TPM_LEFTALIGN | TPM_BOTTOMALIGN | TPM_LEFTBUTTON, pt.X, pt.Y, messageWindowHandle, IntPtr.Zero);
-            WinAPI.DestroyMenu(hMenu);
-        }
-
-
-        private static IntPtr WndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam)
-        {
-            switch (msg)
-            {
-                case TRAY_ICON_MESSAGE:
-                    switch ((uint)lParam)
-                    {
-                        case WM_LBUTTONUP:  // Left Click Tray Icon
-                            OnLeftClick?.Invoke();
-                            break;
-
-                        case WM_RBUTTONUP:  // Right Click Tray Icon
-                            ShowContextMenu();
-                            break;
-                    }
-                    return IntPtr.Zero;
-
-                case WM_COMMAND:
-                    uint commandId = (uint)wParam & 0xFFFF;
-                    MenuActions[ActionMappings[commandId]]?.Invoke();
-                    return IntPtr.Zero;
-
-                default:
-                    // default window procedure
-                    return WinAPI.DefWindowProc(hWnd, msg, wParam, lParam);
-            }
+            NativePlugin.MacStatusBar_ShowMenu();
         }
 
         private static void CleanupResources()
         {
-            IntPtr hInstance = WinAPI.GetModuleHandle(null);
-
-            if (_init && messageWindowHandle != IntPtr.Zero)
+            if (_init)
             {
-                bool success = WinAPI.Shell_NotifyIcon(NIM_DELETE, ref notifyIconData);
-                if (!success)
-                    Debug.LogWarning("Failed to delete notifyIconData");
+                NativePlugin.MacStatusBar_Destroy();
+                _init = false;
             }
 
-            if (hIcon != IntPtr.Zero)
-            {
-                WinAPI.DestroyIcon(hIcon);
-                hIcon = IntPtr.Zero;
-            }
-
-            if (messageWindowHandle != IntPtr.Zero)
-            {
-                WinAPI.DestroyWindow(messageWindowHandle);
-                messageWindowHandle = IntPtr.Zero;
-            }
-
-            if (hInstance != IntPtr.Zero)
-                WinAPI.UnregisterClass(windowClassName, hInstance);
-
-            wndProcDelegate = null;
+            _menuCallbackDelegate = null;
+            _clickCallbackDelegate = null;
 
 #if UNITY_EDITOR
-            Debug.Log("Cleaned up resources for System Tray Icon");
+            Debug.Log("Cleaned up macOS Status Bar Icon");
 #endif
+        }
+
+        // --- Dock Visibility ---
+        public static void SetDockVisible(bool visible)
+        {
+            NativePlugin.MacStatusBar_SetDockVisible(visible ? 1 : 0);
+        }
+
+        public static bool IsDockVisible()
+        {
+            return NativePlugin.MacStatusBar_IsDockVisible() != 0;
         }
     }
 }

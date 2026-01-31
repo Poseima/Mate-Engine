@@ -1,9 +1,8 @@
-﻿using UnityEngine;
+using UnityEngine;
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Diagnostics;
-using System.Runtime.InteropServices;
+using Kirurobo;
 
 public class AvatarBigScreenHandler : MonoBehaviour
 {
@@ -30,31 +29,20 @@ public class AvatarBigScreenHandler : MonoBehaviour
     [Header("Canvas Blocking")]
     public GameObject moveCanvas;
 
-    private IntPtr unityHWND = IntPtr.Zero;
     private bool isBigScreenActive = false;
     private Vector3 originalCamPos;
     private Quaternion originalCamRot;
     private float originalFOV;
     private float originalOrthoSize;
-    private RECT originalWindowRect;
-    private bool originalRectSet = false;
     private Transform bone;
     private AvatarAnimatorController avatarAnimatorController;
     private bool moveCanvasWasActive = false;
     private Coroutine fadeCoroutine;
     private bool isFading = false;
     private bool isInDesktopTransition = false;
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct RECT { public int left, top, right, bottom; }
-
-    [DllImport("user32.dll")]
-    private static extern bool EnumDisplayMonitors(IntPtr hdc, IntPtr lprcClip, MonitorEnumProc lpfnEnum, IntPtr dwData);
-    [DllImport("user32.dll")]
-    private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
-    [DllImport("user32.dll")]
-    private static extern bool MoveWindow(IntPtr hWnd, int X, int Y, int nWidth, int nHeight, bool bRepaint);
-    private delegate bool MonitorEnumProc(IntPtr hMonitor, IntPtr hdcMonitor, ref RECT lprcMonitor, IntPtr dwData);
+    private Vector2 savedWindowPos;
+    private Vector2 savedWindowSize;
+    private bool hasSavedWindowRect;
 
     public static List<AvatarBigScreenHandler> ActiveHandlers = new List<AvatarBigScreenHandler>();
 
@@ -78,7 +66,6 @@ public class AvatarBigScreenHandler : MonoBehaviour
 
     void Start()
     {
-        unityHWND = Process.GetCurrentProcess().MainWindowHandle;
         if (MainCamera == null) MainCamera = Camera.main;
         if (avatarAnimator == null) avatarAnimator = GetComponent<Animator>();
         if (MainCamera != null)
@@ -87,11 +74,6 @@ public class AvatarBigScreenHandler : MonoBehaviour
             originalCamRot = MainCamera.transform.rotation;
             originalFOV = MainCamera.fieldOfView;
             originalOrthoSize = MainCamera.orthographicSize;
-        }
-        if (unityHWND != IntPtr.Zero && GetWindowRect(unityHWND, out RECT r))
-        {
-            originalWindowRect = r;
-            originalRectSet = true;
         }
         avatarAnimatorController = GetComponent<AvatarAnimatorController>();
     }
@@ -160,6 +142,20 @@ public class AvatarBigScreenHandler : MonoBehaviour
         if (moveCanvas != null && moveCanvas.activeSelf) moveCanvas.SetActive(false);
 
         bone = avatarAnimator ? avatarAnimator.GetBoneTransform(attachBone) : null;
+
+        // Save window rect and expand to fill current monitor
+        var uwc = UniWindowController.current;
+        if (uwc != null)
+        {
+            savedWindowPos = uwc.windowPosition;
+            savedWindowSize = uwc.windowSize;
+            hasSavedWindowRect = true;
+
+            Rect monRect = MonitorHelper.GetCurrentMonitorRect();
+            uwc.windowPosition = new Vector2(monRect.x, monRect.y);
+            uwc.windowSize = new Vector2(monRect.width, monRect.height);
+        }
+
         if (fadeCoroutine != null) StopCoroutine(fadeCoroutine);
         fadeCoroutine = StartCoroutine(BigScreenEnterSequence());
     }
@@ -255,12 +251,19 @@ public class AvatarBigScreenHandler : MonoBehaviour
             if (avatarAnimator != null) avatarAnimator.SetBool("isBigScreen", false);
             if (avatarAnimatorController != null) avatarAnimatorController.BlockDraggingOverride = false;
             if (moveCanvas != null && moveCanvasWasActive) moveCanvas.SetActive(true);
-            if (unityHWND != IntPtr.Zero && originalRectSet)
+
+            // Restore original window rect
+            if (hasSavedWindowRect)
             {
-                int w = originalWindowRect.right - originalWindowRect.left;
-                int h = originalWindowRect.bottom - originalWindowRect.top;
-                MoveWindow(unityHWND, originalWindowRect.left, originalWindowRect.top, w, h, true);
+                var uwcRestore = UniWindowController.current;
+                if (uwcRestore != null)
+                {
+                    uwcRestore.windowPosition = savedWindowPos;
+                    uwcRestore.windowSize = savedWindowSize;
+                }
+                hasSavedWindowRect = false;
             }
+
             if (MainCamera != null)
             {
                 MainCamera.transform.position = originalCamPos;
@@ -269,27 +272,6 @@ public class AvatarBigScreenHandler : MonoBehaviour
                 MainCamera.orthographicSize = originalOrthoSize;
             }
         }
-    }
-
-    RECT FindBestMonitorRect(RECT windowRect)
-    {
-        List<RECT> monitorRects = new List<RECT>();
-        EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, (IntPtr hMonitor, IntPtr hdc, ref RECT lprcMonitor, IntPtr data) =>
-        { monitorRects.Add(lprcMonitor); return true; }, IntPtr.Zero);
-        int idx = 0, maxArea = 0;
-        for (int i = 0; i < monitorRects.Count; i++)
-        {
-            int overlap = OverlapArea(windowRect, monitorRects[i]);
-            if (overlap > maxArea) { idx = i; maxArea = overlap; }
-        }
-        return monitorRects.Count > 0 ? monitorRects[idx] : new RECT { left = 0, top = 0, right = Screen.currentResolution.width, bottom = Screen.currentResolution.height };
-    }
-    int OverlapArea(RECT a, RECT b)
-    {
-        int x1 = Math.Max(a.left, b.left), x2 = Math.Min(a.right, b.right);
-        int y1 = Math.Max(a.top, b.top), y2 = Math.Min(a.bottom, b.bottom);
-        int w = x2 - x1, h = y2 - y1;
-        return (w > 0 && h > 0) ? w * h : 0;
     }
 
     IEnumerator GlideAvatarDesktop(float duration, bool toFadeY)
@@ -318,15 +300,16 @@ public class AvatarBigScreenHandler : MonoBehaviour
         camPos.y = toY;
         MainCamera.transform.position = camPos;
 
-        if (toFadeY && unityHWND != IntPtr.Zero)
+        // Restore window rect when gliding back to desktop
+        if (!toFadeY && hasSavedWindowRect)
         {
-            if (GetWindowRect(unityHWND, out RECT windowRect))
+            var uwcGlide = UniWindowController.current;
+            if (uwcGlide != null)
             {
-                RECT targetScreen = FindBestMonitorRect(windowRect);
-                int sw = targetScreen.right - targetScreen.left, sh = targetScreen.bottom - targetScreen.top;
-                MoveWindow(unityHWND, targetScreen.left, targetScreen.top, sw, sh, true);
-                originalWindowRect = windowRect; originalRectSet = true;
+                uwcGlide.windowPosition = savedWindowPos;
+                uwcGlide.windowSize = savedWindowSize;
             }
+            hasSavedWindowRect = false;
         }
         if (!toFadeY && MainCamera != null)
         {
