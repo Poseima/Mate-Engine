@@ -177,16 +177,29 @@ void MacStatusBar_ShowMenu(void) {
 }
 
 void MacStatusBar_Destroy(void) {
-    dispatch_async(dispatch_get_main_queue(), ^{
+    // Null callbacks first to prevent calling back into torn-down managed code
+    sMenuCallback = NULL;
+    sClickCallback = NULL;
+
+    // Must run synchronously — if we dispatch_async, Unity may tear down
+    // before the block executes, leaving dangling pointers that crash in objc_retain.
+    if ([NSThread isMainThread]) {
         if (sStatusItem) {
             [[NSStatusBar systemStatusBar] removeStatusItem:sStatusItem];
             sStatusItem = nil;
         }
         sMenu = nil;
         sIcon = nil;
-        sMenuCallback = NULL;
-        sClickCallback = NULL;
-    });
+    } else {
+        dispatch_sync(dispatch_get_main_queue(), ^{
+            if (sStatusItem) {
+                [[NSStatusBar systemStatusBar] removeStatusItem:sStatusItem];
+                sStatusItem = nil;
+            }
+            sMenu = nil;
+            sIcon = nil;
+        });
+    }
 }
 
 // --- Dock visibility ---
