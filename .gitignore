@@ -24,6 +24,7 @@ sysinfo.txt
 
 # Crash logs
 *.stacktrace
+mono_crash.*.json
 
 # User-specific files
 *.user
@@ -75,3 +76,14 @@ Assets/AssetStoreTools*
 Assets/Example Avatar - USED FOR MATE ENGINE
 ProjectSettings/Packages
 UserSettings/Layouts
+UserSettings/EditorUserSettings.asset
+
+# Unity recovery files
+Assets/_Recovery/
+
+# Scriptable Build Pipeline
+ProjectSettings/ScriptableBuildPipeline.json
+
+# Streaming assets (local LLM configs)
+Assets/StreamingAssets/LLMManager.json
+Assets/StreamingAssets/LLMManager.json.meta
