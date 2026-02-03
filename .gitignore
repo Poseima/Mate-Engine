@@ -87,3 +87,9 @@ ProjectSettings/ScriptableBuildPipeline.json
 # Streaming assets (local LLM configs)
 Assets/StreamingAssets/LLMManager.json
 Assets/StreamingAssets/LLMManager.json.meta
+
+# Local build/runtime artifacts
+Assets/StreamingAssets/codex-app-server
+Assets/StreamingAssets/codex-app-server.meta
+Assets/AddressableAssetsData/
+UserSettings/
