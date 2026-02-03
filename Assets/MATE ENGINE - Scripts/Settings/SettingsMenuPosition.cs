@@ -11,6 +11,7 @@ public class SettingsMenuPosition : MonoBehaviour
         public RectTransform settingsMenu;
         [HideInInspector] public float originalX;
         [HideInInspector] public float originalY;
+        [HideInInspector] public Vector3 originalScale;
         [HideInInspector] public Vector2 lastApplied;
     }
 
@@ -19,6 +20,11 @@ public class SettingsMenuPosition : MonoBehaviour
 
     [Header("Edge margin in Pixels")]
     public float edgeMargin = 50f;
+
+    [Header("Scale with window")]
+    public float referenceHeight = 1080f;
+    public float minScale = 0.4f;
+    public float maxScale = 1.2f;
 
     [Header("Checks per second")]
     public float checkFPS = 20f;
@@ -37,6 +43,7 @@ public class SettingsMenuPosition : MonoBehaviour
             if (!menu.settingsMenu) continue;
             menu.originalX = menu.settingsMenu.anchoredPosition.x;
             menu.originalY = menu.settingsMenu.anchoredPosition.y;
+            menu.originalScale = menu.settingsMenu.localScale;
             menu.lastApplied = menu.settingsMenu.anchoredPosition;
         }
     }
@@ -60,6 +67,8 @@ public class SettingsMenuPosition : MonoBehaviour
 
         // If we never found a valid monitor, skip
         if (currentMonitorRect.width <= 0) return;
+
+        float scaleFactor = Mathf.Clamp(winSize.y / referenceHeight, minScale, maxScale);
 
         float winLeft = winPos.x;
         float winRight = winPos.x + winSize.x;
@@ -90,7 +99,8 @@ public class SettingsMenuPosition : MonoBehaviour
                 targetX = menu.originalX;
             }
 
-            Vector2 newPos = new Vector2(targetX, menu.originalY);
+            Vector2 newPos = new Vector2(targetX, menu.originalY) * scaleFactor;
+            menu.settingsMenu.localScale = menu.originalScale * scaleFactor;
 
             if (newPos != menu.lastApplied)
             {
