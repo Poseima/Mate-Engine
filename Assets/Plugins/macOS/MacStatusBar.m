@@ -3,7 +3,7 @@
 // Native macOS plugin for Unity — NSStatusBar menu bar icon + NSMenu + Dock control
 //
 // Compiled into MacStatusBar.bundle via:
-//   clang -framework Cocoa -framework AppKit -bundle -o MacStatusBar.bundle MacStatusBar.m
+//   clang -fobjc-arc -framework Cocoa -framework AppKit -bundle -o MacStatusBar.bundle MacStatusBar.m
 //
 
 #import <Cocoa/Cocoa.h>
