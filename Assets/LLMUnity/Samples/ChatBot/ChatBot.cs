@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 using System.Collections.Generic;
 using System.Threading.Tasks;
@@ -5,14 +6,15 @@ using LLMUnity;
 using UnityEngine.UI;
 using System.Collections;
 using System.Linq;
+using MateEngine.Codex;
 
 namespace LLMUnitySamples
 {
     public class ChatBot : MonoBehaviour
     {
         [Header("Containers")]
-        public Transform chatContainer;         
-        public Transform inputContainer;        
+        public Transform chatContainer;
+        public Transform inputContainer;
 
         [Header("Colors & Font")]
         public Color playerColor = new Color32(81, 164, 81, 255);
@@ -25,14 +27,17 @@ namespace LLMUnitySamples
         public int bubbleWidth = 600;
         public float textPadding = 10f;
         public float bubbleSpacing = 10f;
-        public float bottomPadding = 10f;       
+        public float bottomPadding = 10f;
         public Sprite sprite;
         public Sprite roundedSprite16;
         public Sprite roundedSprite32;
         public Sprite roundedSprite64;
 
-        [Header("LLM")]
+        [Header("LLM (Legacy — used as fallback when Codex is not configured)")]
         public LLMCharacter llmCharacter;
+
+        [Header("Codex")]
+        public bool useCodex = true;
 
         [Header("Input Settings")]
         public string inputPlaceholder = "Message me";
@@ -76,6 +81,10 @@ namespace LLMUnitySamples
         private Animator lastAvatarAnimator;
         private static readonly int isTalkingHash = Animator.StringToHash("isTalking");
 
+        private AnimationDirectiveProcessor animDirectiveProcessor;
+        private bool codexReady;
+
+        bool UseCodexBackend => useCodex && CodexBridge.Instance != null && CodexBridge.Instance.IsConnected;
 
         void Start()
         {
@@ -123,9 +132,142 @@ namespace LLMUnitySamples
             inputBubble.AddValueChangedListener(onValueChanged);
             inputBubble.setInteractable(false);
 
-            ShowLoadedMessages();
-            _ = llmCharacter.Warmup(WarmUpCallback);
             FindAvatarSmart();
+            InitializeBackend();
+        }
+
+        void InitializeBackend()
+        {
+            if (useCodex)
+            {
+                StartCoroutine(InitCodexRoutine());
+            }
+            else
+            {
+                ShowLoadedMessages();
+                _ = llmCharacter.Warmup(WarmUpCallback);
+            }
+        }
+
+        IEnumerator InitCodexRoutine()
+        {
+            // Wait one frame so CodexBridge singleton can initialize
+            yield return null;
+
+            var bridge = CodexBridge.Instance;
+            if (bridge == null)
+            {
+                Debug.LogWarning("[ChatBot] CodexBridge not found in scene. Falling back to LLMCharacter.");
+                useCodex = false;
+                ShowLoadedMessages();
+                _ = llmCharacter.Warmup(WarmUpCallback);
+                yield break;
+            }
+
+            // If not yet connected, initialize (no API key — env var or OAuth)
+            if (!bridge.IsConnected)
+            {
+                bridge.Initialize();
+            }
+
+            // Wait for connection
+            float timeout = 10f;
+            while (!bridge.IsConnected && timeout > 0f)
+            {
+                timeout -= Time.deltaTime;
+                yield return null;
+            }
+
+            if (!bridge.IsConnected)
+            {
+                Debug.LogWarning("[ChatBot] CodexBridge failed to connect. Falling back to LLMCharacter.");
+                useCodex = false;
+                ShowLoadedMessages();
+                _ = llmCharacter.Warmup(WarmUpCallback);
+                yield break;
+            }
+
+            // Wait briefly for auto-auth (CheckAuthStatus runs after handshake)
+            float authTimeout = 3f;
+            while (!bridge.IsAuthenticated && authTimeout > 0f)
+            {
+                authTimeout -= Time.deltaTime;
+                yield return null;
+            }
+
+            // If still not authenticated, show prompt and wait for manual login
+            if (!bridge.IsAuthenticated)
+            {
+                inputBubble.SetPlaceHolderText("Login in Settings to start chatting");
+                inputBubble.setInteractable(false);
+                bridge.OnLoginResult += OnCodexLoginResult;
+                yield break;
+            }
+
+            // Already authenticated — start thread
+            StartCodexThread(bridge);
+        }
+
+        void OnCodexLoginResult(bool success, string error)
+        {
+            if (!success) return;
+
+            var bridge = CodexBridge.Instance;
+            if (bridge != null)
+            {
+                bridge.OnLoginResult -= OnCodexLoginResult;
+                StartCodexThread(bridge);
+            }
+        }
+
+        void StartCodexThread(CodexBridge bridge)
+        {
+            var data = SaveLoadHandler.Instance?.data;
+            bool animDirectives = data?.enableAnimationDirectives ?? false;
+            string userPrompt = "";
+            var promptBinder = FindFirstObjectByType<AISystemPromptBinder>();
+            if (promptBinder != null && promptBinder.input != null)
+                userPrompt = promptBinder.input.text;
+
+            string systemPrompt = bridge.BuildSystemPrompt(userPrompt, animDirectives);
+            string savedThread = data?.codexThreadId;
+            string model = data?.codexModel ?? "";
+
+            if (!string.IsNullOrEmpty(savedThread))
+            {
+                bridge.ResumeThread(savedThread, (ok) =>
+                {
+                    if (!ok)
+                        bridge.StartThread(model, systemPrompt, OnThreadReady);
+                    else
+                        OnThreadReady(savedThread);
+                });
+            }
+            else
+            {
+                bridge.StartThread(model, systemPrompt, OnThreadReady);
+            }
+        }
+
+        void OnThreadReady(string threadId)
+        {
+            // Save thread ID for persistence
+            if (SaveLoadHandler.Instance != null)
+            {
+                SaveLoadHandler.Instance.data.codexThreadId = threadId;
+                SaveLoadHandler.Instance.SaveToDisk();
+            }
+
+            codexReady = true;
+
+            // Setup animation directive processor if enabled
+            var data = SaveLoadHandler.Instance?.data;
+            if (data != null && data.enableAnimationDirectives)
+            {
+                animDirectiveProcessor = new AnimationDirectiveProcessor();
+            }
+
+            WarmUpCallback();
         }
 
         void FindAvatarSmart()
@@ -236,6 +378,13 @@ namespace LLMUnitySamples
 
         void ShowLoadedMessages()
         {
+            if (UseCodexBackend)
+            {
+                // Codex persists sessions server-side; no local chat to replay
+                StartCoroutine(ScrollToBottomNextFrame());
+                return;
+            }
+
             int start = 1;
             int total = llmCharacter.chat.Count;
             if (maxMessages > 0)
@@ -267,22 +416,47 @@ namespace LLMUnitySamples
                 streamAudioSource.Play();
             if (avatarAnimator != null) avatarAnimator.SetBool(isTalkingHash, true);
 
-            Task chatTask = llmCharacter.Chat(
-                message,
-                (partial) => { aiBubble.SetText(partial); layoutDirty = true; },
-                () =>
+            Action<string> streamCb = (partial) => { aiBubble.SetText(partial); layoutDirty = true; };
+            Action completeCb = () =>
+            {
+                if (avatarAnimator != null) avatarAnimator.SetBool(isTalkingHash, false);
+
+                aiBubble.SetText(aiBubble.GetText());
+                layoutDirty = true;
+
+                if (streamAudioSource != null && streamAudioSource.isPlaying)
+                    StartCoroutine(FadeOutStreamAudio());
+
+                AllowInput();
+            };
+
+            // Wrap stream callback with animation directive processor if enabled
+            if (animDirectiveProcessor != null && UseCodexBackend)
+            {
+                FindAvatarSmart(); // ensure we have current avatar
+                var animator = avatarAnimator;
+                var blendshapes = animator != null ? animator.GetComponentInChildren<UniversalBlendshapes>() : null;
+                animDirectiveProcessor.SetTargets(animator, blendshapes);
+
+                var innerStreamCb = streamCb;
+                streamCb = (partial) =>
                 {
-                    if (avatarAnimator != null) avatarAnimator.SetBool(isTalkingHash, false);
+                    string clean = animDirectiveProcessor.ProcessText(partial, this);
+                    innerStreamCb(clean);
+                };
+            }
 
-                    aiBubble.SetText(aiBubble.GetText());
-                    layoutDirty = true;
+            if (UseCodexBackend)
+            {
+                CodexBridge.Instance.SendMessage(message, streamCb, completeCb);
+            }
+            else
+            {
+                Callback<string> llmStreamCb = (partial) => streamCb(partial);
+                EmptyCallback llmCompleteCb = () => completeCb();
+                Task chatTask = llmCharacter.Chat(message, llmStreamCb, llmCompleteCb);
+            }
 
-                    if (streamAudioSource != null && streamAudioSource.isPlaying)
-                        StartCoroutine(FadeOutStreamAudio());
-
-                    AllowInput();
-                }
-            );
             inputBubble.SetText("");
         }
 
@@ -315,7 +489,10 @@ namespace LLMUnitySamples
 
         public void CancelRequests()
         {
-            llmCharacter.CancelRequests();
+            if (UseCodexBackend)
+                CodexBridge.Instance.InterruptTurn();
+            else
+                llmCharacter.CancelRequests();
             AllowInput();
         }
 
@@ -403,7 +580,7 @@ namespace LLMUnitySamples
             else if (cornerRadius <= 32) sprite = roundedSprite32;
             else sprite = roundedSprite64;
 
-            if (onValidateWarning && llmCharacter != null && !llmCharacter.remote && llmCharacter.llm != null && llmCharacter.llm.model == "")
+            if (!useCodex && onValidateWarning && llmCharacter != null && !llmCharacter.remote && llmCharacter.llm != null && llmCharacter.llm.model == "")
             {
                 Debug.LogWarning($"Please select a model in the {llmCharacter.llm.gameObject.name} GameObject!");
                 onValidateWarning = false;

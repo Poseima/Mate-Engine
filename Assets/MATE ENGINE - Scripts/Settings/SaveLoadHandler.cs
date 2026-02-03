@@ -179,6 +179,13 @@ public class SaveLoadHandler : MonoBehaviour
 
         public bool enableLocomotion = false;
 
+        // Codex AI Engine
+        public string codexApiKey = "";
+        public string codexModel = "";
+        public string codexThreadId = "";
+        public int codexAuthMode = 0;              // 0 = API key, 1 = OAuth
+        public string codexProvider = "";
+        public bool enableAnimationDirectives = false;
 
         //ALARM
         [Serializable]
@@ -225,6 +232,10 @@ public class SaveLoadHandler : MonoBehaviour
             data.settingsVersion = 1;
             SaveToDisk();
         }
+        if (data.codexApiKey == null) data.codexApiKey = "";
+        if (data.codexModel == null) data.codexModel = "";
+        if (data.codexThreadId == null) data.codexThreadId = "";
+        if (data.codexProvider == null) data.codexProvider = "";
     }
 
     public static void SyncAllowedAppsToAllAvatars()

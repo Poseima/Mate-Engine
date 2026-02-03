@@ -1,0 +1,327 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c216bc8ca3cfd47e3a02ad8718b6764c, type: 3}
+  m_Name: SemanticClipRegistry
+  m_EditorClassIdentifier: Assembly-CSharp::MateEngine.Codex.SemanticClipRegistry
+  clips:
+  - id: idle_f01
+    actionType: 0
+    paramName: IdleIndex
+    paramValue: 0
+    boolFlag: 
+    boolValue: 0
+  - id: idle_f02
+    actionType: 0
+    paramName: IdleIndex
+    paramValue: 1
+    boolFlag: 
+    boolValue: 0
+  - id: idle_f03
+    actionType: 0
+    paramName: IdleIndex
+    paramValue: 2
+    boolFlag: 
+    boolValue: 0
+  - id: idle_f04
+    actionType: 0
+    paramName: IdleIndex
+    paramValue: 3
+    boolFlag: 
+    boolValue: 0
+  - id: idle_f05
+    actionType: 0
+    paramName: IdleIndex
+    paramValue: 4
+    boolFlag: 
+    boolValue: 0
+  - id: idle_f06
+    actionType: 0
+    paramName: IdleIndex
+    paramValue: 5
+    boolFlag: 
+    boolValue: 0
+  - id: idle_f07
+    actionType: 0
+    paramName: IdleIndex
+    paramValue: 6
+    boolFlag: 
+    boolValue: 0
+  - id: idle_f08
+    actionType: 0
+    paramName: IdleIndex
+    paramValue: 7
+    boolFlag: 
+    boolValue: 0
+  - id: idle_f09
+    actionType: 0
+    paramName: IdleIndex
+    paramValue: 8
+    boolFlag: 
+    boolValue: 0
+  - id: idle_f10
+    actionType: 0
+    paramName: IdleIndex
+    paramValue: 9
+    boolFlag: 
+    boolValue: 0
+  - id: idle_f11
+    actionType: 0
+    paramName: IdleIndex
+    paramValue: 10
+    boolFlag: 
+    boolValue: 0
+  - id: idle_f12
+    actionType: 0
+    paramName: IdleIndex
+    paramValue: 11
+    boolFlag: 
+    boolValue: 0
+  - id: idle_f13
+    actionType: 0
+    paramName: IdleIndex
+    paramValue: 12
+    boolFlag: 
+    boolValue: 0
+  - id: idle_f14
+    actionType: 0
+    paramName: IdleIndex
+    paramValue: 13
+    boolFlag: 
+    boolValue: 0
+  - id: idle_f15
+    actionType: 0
+    paramName: IdleIndex
+    paramValue: 14
+    boolFlag: 
+    boolValue: 0
+  - id: idle_f16
+    actionType: 0
+    paramName: IdleIndex
+    paramValue: 15
+    boolFlag: 
+    boolValue: 0
+  - id: idle_f17
+    actionType: 0
+    paramName: IdleIndex
+    paramValue: 16
+    boolFlag: 
+    boolValue: 0
+  - id: idle_f18
+    actionType: 0
+    paramName: IdleIndex
+    paramValue: 17
+    boolFlag: 
+    boolValue: 0
+  - id: idle_f19
+    actionType: 0
+    paramName: IdleIndex
+    paramValue: 18
+    boolFlag: 
+    boolValue: 0
+  - id: idle_f20
+    actionType: 0
+    paramName: IdleIndex
+    paramValue: 19
+    boolFlag: 
+    boolValue: 0
+  - id: idle_m01
+    actionType: 0
+    paramName: IdleIndex
+    paramValue: 0
+    boolFlag: isMale
+    boolValue: 1
+  - id: idle_m02
+    actionType: 0
+    paramName: IdleIndex
+    paramValue: 1
+    boolFlag: isMale
+    boolValue: 1
+  - id: idle_m03
+    actionType: 0
+    paramName: IdleIndex
+    paramValue: 2
+    boolFlag: isMale
+    boolValue: 1
+  - id: idle_m04
+    actionType: 0
+    paramName: IdleIndex
+    paramValue: 3
+    boolFlag: isMale
+    boolValue: 1
+  - id: idle_m05
+    actionType: 0
+    paramName: IdleIndex
+    paramValue: 4
+    boolFlag: isMale
+    boolValue: 1
+  - id: idle_m06
+    actionType: 0
+    paramName: IdleIndex
+    paramValue: 5
+    boolFlag: isMale
+    boolValue: 1
+  - id: idle_m07
+    actionType: 0
+    paramName: IdleIndex
+    paramValue: 6
+    boolFlag: isMale
+    boolValue: 1
+  - id: idle_m08
+    actionType: 0
+    paramName: IdleIndex
+    paramValue: 7
+    boolFlag: isMale
+    boolValue: 1
+  - id: idle_m09
+    actionType: 0
+    paramName: IdleIndex
+    paramValue: 8
+    boolFlag: isMale
+    boolValue: 1
+  - id: dance_f01
+    actionType: 0
+    paramName: DanceIndex
+    paramValue: 0
+    boolFlag: isDancing
+    boolValue: 1
+  - id: dance_f02
+    actionType: 0
+    paramName: DanceIndex
+    paramValue: 1
+    boolFlag: isDancing
+    boolValue: 1
+  - id: dance_f03
+    actionType: 0
+    paramName: DanceIndex
+    paramValue: 2
+    boolFlag: isDancing
+    boolValue: 1
+  - id: dance_f04
+    actionType: 0
+    paramName: DanceIndex
+    paramValue: 3
+    boolFlag: isDancing
+    boolValue: 1
+  - id: dance_f05
+    actionType: 0
+    paramName: DanceIndex
+    paramValue: 4
+    boolFlag: isDancing
+    boolValue: 1
+  - id: dance_f06
+    actionType: 0
+    paramName: DanceIndex
+    paramValue: 5
+    boolFlag: isDancing
+    boolValue: 1
+  - id: dance_f07
+    actionType: 0
+    paramName: DanceIndex
+    paramValue: 6
+    boolFlag: isDancing
+    boolValue: 1
+  - id: dance_f08
+    actionType: 0
+    paramName: DanceIndex
+    paramValue: 7
+    boolFlag: isDancing
+    boolValue: 1
+  - id: dance_f09
+    actionType: 0
+    paramName: DanceIndex
+    paramValue: 8
+    boolFlag: isDancing
+    boolValue: 1
+  - id: dance_f10
+    actionType: 0
+    paramName: DanceIndex
+    paramValue: 9
+    boolFlag: isDancing
+    boolValue: 1
+  - id: dance_f11
+    actionType: 0
+    paramName: DanceIndex
+    paramValue: 10
+    boolFlag: isDancing
+    boolValue: 1
+  - id: dance_f12
+    actionType: 0
+    paramName: DanceIndex
+    paramValue: 11
+    boolFlag: isDancing
+    boolValue: 1
+  - id: dance_f13
+    actionType: 0
+    paramName: DanceIndex
+    paramValue: 12
+    boolFlag: isDancing
+    boolValue: 1
+  - id: dance_f14
+    actionType: 0
+    paramName: DanceIndex
+    paramValue: 13
+    boolFlag: isDancing
+    boolValue: 1
+  - id: dance_m01
+    actionType: 0
+    paramName: DanceIndex
+    paramValue: 0
+    boolFlag: isDancing
+    boolValue: 1
+  - id: dance_m02
+    actionType: 0
+    paramName: DanceIndex
+    paramValue: 1
+    boolFlag: isDancing
+    boolValue: 1
+  - id: dance_m03
+    actionType: 0
+    paramName: DanceIndex
+    paramValue: 2
+    boolFlag: isDancing
+    boolValue: 1
+  - id: dance_m04
+    actionType: 0
+    paramName: DanceIndex
+    paramValue: 3
+    boolFlag: isDancing
+    boolValue: 1
+  - id: face_joy
+    actionType: 3
+    paramName: Joy
+    paramValue: 1
+    boolFlag: 
+    boolValue: 0
+  - id: face_angry
+    actionType: 3
+    paramName: Angry
+    paramValue: 1
+    boolFlag: 
+    boolValue: 0
+  - id: face_sorrow
+    actionType: 3
+    paramName: Sorrow
+    paramValue: 1
+    boolFlag: 
+    boolValue: 0
+  - id: face_fun
+    actionType: 3
+    paramName: Fun
+    paramValue: 1
+    boolFlag: 
+    boolValue: 0
+  - id: face_neutral
+    actionType: 3
+    paramName: Neutral
+    paramValue: 1
+    boolFlag: 
+    boolValue: 0
