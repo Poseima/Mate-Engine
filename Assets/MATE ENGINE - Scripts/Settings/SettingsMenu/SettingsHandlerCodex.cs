@@ -196,7 +196,17 @@ public class SettingsHandlerCodex : MonoBehaviour
     void OnModelChanged(int index)
     {
         if (index < 0 || index >= cachedModels.Count) return;
-        SaveLoadHandler.Instance.data.codexModel = cachedModels[index].id;
+        var m = cachedModels[index];
+        SaveLoadHandler.Instance.data.codexModel = m.model;
+
+        // Auto-select provider if the model id encodes one (e.g., "minimax/codex-MiniMax-M2.1")
+        if (!string.IsNullOrEmpty(m.id) && m.id.Contains("/"))
+        {
+            string inferredProvider = m.id.Substring(0, m.id.IndexOf('/'));
+            SaveLoadHandler.Instance.data.codexProvider = inferredProvider;
+            SyncProviderDropdown(inferredProvider);
+        }
+
         Save();
     }
 
@@ -292,6 +302,19 @@ public class SettingsHandlerCodex : MonoBehaviour
         SaveLoadHandler.Instance.data.codexThreadId = "";
         Save();
         UpdateStatus();
+    }
+
+    void SyncProviderDropdown(string providerId)
+    {
+        if (providerDropdown == null || cachedProviders == null) return;
+        for (int i = 0; i < cachedProviders.Count; i++)
+        {
+            if (cachedProviders[i].id == providerId)
+            {
+                providerDropdown.SetValueWithoutNotify(i);
+                return;
+            }
+        }
     }
 
     // ── Helpers ────────────────────────────────────────────────

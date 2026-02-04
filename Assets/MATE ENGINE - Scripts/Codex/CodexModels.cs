@@ -134,6 +134,7 @@ namespace MateEngine.Codex
         public string approvalPolicy;
         public CollaborationModeParam collaborationMode;
         public SandboxPolicyParam sandboxPolicy;
+        public string providerId;
     }
 
     [Serializable]

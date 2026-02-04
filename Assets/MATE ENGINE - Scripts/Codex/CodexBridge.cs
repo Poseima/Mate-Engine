@@ -46,6 +46,12 @@ namespace MateEngine.Codex
             DontDestroyOnLoad(gameObject);
         }
 
+        void Start()
+        {
+            if (!IsConnected)
+                Initialize();
+        }
+
         void Update()
         {
             protocol.Pump();
@@ -90,7 +96,8 @@ namespace MateEngine.Codex
                 return;
             }
 
-            var env = new Dictionary<string, string>();
+            var env = LoadShellEnvironment();
+            Debug.Log("[CodexBridge] Loaded " + env.Count + " env vars from shell profile.");
             if (!string.IsNullOrEmpty(apiKey))
                 env["CODEX_API_KEY"] = apiKey;
 
@@ -113,6 +120,7 @@ namespace MateEngine.Codex
                 }
             };
 
+            Debug.Log("[CodexBridge] Sending initialize request to binary...");
             protocol.SendRequest("initialize", initParams, (result, error) =>
             {
                 if (error != null)
@@ -131,10 +139,12 @@ namespace MateEngine.Codex
                 // If API key was provided, authenticate; otherwise check cached auth
                 if (!string.IsNullOrEmpty(apiKey))
                 {
+                    Debug.Log("[CodexBridge] API key provided, authenticating via API key...");
                     AuthenticateApiKey(apiKey);
                 }
                 else
                 {
+                    Debug.Log("[CodexBridge] No API key provided, checking cached auth status...");
                     CheckAuthStatus();
                 }
 
@@ -182,20 +192,52 @@ namespace MateEngine.Codex
 
         public void CheckAuthStatus()
         {
+            // Check if auth.json exists on disk
+            string authPath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".codex", "auth.json");
+            Debug.Log("[CodexBridge] Auth file path: " + authPath);
+            Debug.Log("[CodexBridge] Auth file exists: " + File.Exists(authPath));
+            if (File.Exists(authPath))
+            {
+                try
+                {
+                    var content = File.ReadAllText(authPath);
+                    Debug.Log("[CodexBridge] Auth file size: " + content.Length + " bytes");
+                    // Log keys only (not values) to avoid leaking tokens
+                    var json = JObject.Parse(content);
+                    Debug.Log("[CodexBridge] Auth file keys: " + string.Join(", ", json.Properties()));
+                }
+                catch (Exception e)
+                {
+                    Debug.LogWarning("[CodexBridge] Failed to read auth file: " + e.Message);
+                }
+            }
+
+            Debug.Log("[CodexBridge] Sending getAuthStatus RPC to binary...");
             var p = new GetAuthStatusParams();
             protocol.SendRequest("getAuthStatus", p, (result, error) =>
             {
                 if (error != null)
                 {
-                    Debug.Log("[CodexBridge] Auth status check failed: " + error.message);
+                    Debug.LogError("[CodexBridge] Auth status check failed: " + error.message);
                     return;
                 }
+                Debug.Log("[CodexBridge] getAuthStatus response: " + (result?.ToString() ?? "null"));
                 var authMethod = result?["authMethod"]?.Value<string>();
+                var requiresOpenaiAuth = result?["requiresOpenaiAuth"]?.Value<bool>() ?? true;
+
                 if (!string.IsNullOrEmpty(authMethod))
                 {
                     IsAuthenticated = true;
                     OnLoginResult?.Invoke(true, null);
                     Debug.Log("[CodexBridge] Auto-authenticated via cached " + authMethod);
+                }
+                else if (!requiresOpenaiAuth)
+                {
+                    // Provider handles its own auth (e.g. API key via env) — no OpenAI login needed
+                    IsAuthenticated = true;
+                    OnLoginResult?.Invoke(true, null);
+                    Debug.Log("[CodexBridge] Provider does not require OpenAI auth — treating as authenticated.");
                 }
                 else
                 {
@@ -367,6 +409,20 @@ namespace MateEngine.Codex
                 cwd = dawnHome,
             };
 
+            // Override model + provider per-turn to match current Codex Configuration
+            string currentModel = SaveLoadHandler.Instance?.data?.codexModel ?? "";
+            if (!string.IsNullOrEmpty(currentModel))
+            {
+                p.collaborationMode = new CollaborationModeParam
+                {
+                    settings = new CollaborationModeSettings { model = currentModel }
+                };
+            }
+
+            string currentProvider = SaveLoadHandler.Instance?.data?.codexProvider ?? "";
+            if (!string.IsNullOrEmpty(currentProvider))
+                p.providerId = currentProvider;
+
             protocol.SendRequest("turn/start", p, (result, error) =>
             {
                 if (error != null)
@@ -381,7 +437,15 @@ namespace MateEngine.Codex
 
         void HandleDelta(string delta)
         {
-            streamBuffer += delta;
+            if (string.IsNullOrEmpty(delta)) return;
+
+            Debug.Log("[CodexBridge RAW delta] " + delta);
+
+            // Strip <think>…</think> blocks (some models wrap reasoning in these)
+            string clean = StripThinkTags(delta);
+            if (string.IsNullOrEmpty(clean)) return;
+
+            streamBuffer += clean;
             currentStreamCb?.Invoke(streamBuffer);
         }
 
@@ -394,6 +458,15 @@ namespace MateEngine.Codex
             currentStreamCb = null;
             currentCompleteCb = null;
             streamBuffer = "";
+        }
+
+        static string StripThinkTags(string text)
+        {
+            if (text == null) return text;
+            // Remove <think>…</think> blocks including newlines around them
+            var result = System.Text.RegularExpressions.Regex.Replace(
+                text, @"<think>[\s\S]*?</think>\s*", "", System.Text.RegularExpressions.RegexOptions.None);
+            return result.TrimStart('\n', '\r');
         }
 
         // ── Interrupt ──────────────────────────────────────────────
@@ -437,6 +510,50 @@ namespace MateEngine.Codex
             }
 
             return combined;
+        }
+
+        // ── Shell environment loader ────────────────────────────────
+
+        /// <summary>
+        /// Launches a login shell to capture the user's full environment (from ~/.zshrc etc.).
+        /// macOS GUI apps don't inherit terminal env vars, so we need this to get
+        /// proxy settings, API keys, and other vars the codex binary needs.
+        /// </summary>
+        static Dictionary<string, string> LoadShellEnvironment()
+        {
+            var result = new Dictionary<string, string>();
+            try
+            {
+                string shell = Environment.GetEnvironmentVariable("SHELL") ?? "/bin/zsh";
+                var psi = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = shell,
+                    Arguments = "-ilc env",
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true
+                };
+                using var proc = System.Diagnostics.Process.Start(psi);
+                string output = proc.StandardOutput.ReadToEnd();
+                proc.WaitForExit(5000);
+
+                foreach (string line in output.Split('\n'))
+                {
+                    int eq = line.IndexOf('=');
+                    if (eq > 0)
+                    {
+                        string key = line.Substring(0, eq);
+                        string val = line.Substring(eq + 1);
+                        result[key] = val;
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                Debug.LogWarning("[CodexBridge] Failed to load shell environment: " + e.Message);
+            }
+            return result;
         }
     }
 }

@@ -224,12 +224,15 @@ namespace MateEngine.Codex
         {
             switch (method)
             {
+                // ── V2 protocol format ──────────────────────────────────
                 case "item/agentMessage/delta":
+                    Debug.Log("[Codex RAW delta] " + @params?.ToString(Formatting.None));
                     var delta = @params?["delta"]?.Value<string>() ?? "";
                     Enqueue(() => OnStreamDelta?.Invoke(delta));
                     break;
 
                 case "turn/completed":
+                    Debug.Log("[Codex RAW turn/completed] " + @params?.ToString(Formatting.None));
                     var tid = @params?["threadId"]?.Value<string>() ?? "";
                     Enqueue(() =>
                     {
@@ -260,6 +263,38 @@ namespace MateEngine.Codex
                     Enqueue(() => OnError?.Invoke(errorMsg));
                     break;
 
+                // ── Raw codex/event format (Chat Completions / aggregated) ─
+
+                case "codex/event/agent_message":
+                    // Aggregated full message (Chat API providers like MiniMax)
+                    Debug.Log("[Codex RAW agent_message] " + @params?.ToString(Formatting.None));
+                    var fullMsg = @params?["msg"]?["message"]?.Value<string>() ?? "";
+                    if (!string.IsNullOrEmpty(fullMsg))
+                        Enqueue(() => OnStreamDelta?.Invoke(fullMsg));
+                    break;
+
+                case "codex/event/task_complete":
+                    // Fires for all providers; only act on it if the v2 turn/completed
+                    // didn't already arrive (i.e. CurrentTurnId is still set).
+                    var rawCompTid = @params?["conversationId"]?.Value<string>() ?? "";
+                    Enqueue(() =>
+                    {
+                        if (CurrentTurnId != null)
+                        {
+                            CurrentTurnId = null;
+                            OnTurnCompleted?.Invoke(rawCompTid);
+                        }
+                    });
+                    break;
+
+                case "codex/event/stream_error":
+                case "codex/event/error":
+                    var rawErr = @params?["msg"]?["message"]?.Value<string>()
+                              ?? @params?.ToString() ?? "Unknown error";
+                    Enqueue(() => OnError?.Invoke(rawErr));
+                    break;
+
+                // ── Informational — silently ignore ─────────────────────
                 case "thread/started":
                 case "thread/name/updated":
                 case "thread/tokenUsage/updated":
@@ -268,7 +303,21 @@ namespace MateEngine.Codex
                 case "account/updated":
                 case "account/rateLimits/updated":
                 case "turn/diff/updated":
-                    // Informational — silently ignore
+                case "codex/event/agent_message_content_delta":
+                case "codex/event/agent_message_delta":
+                case "codex/event/item_started":
+                case "codex/event/item_completed":
+                case "codex/event/user_message":
+                case "codex/event/token_count":
+                case "codex/event/task_started":
+                case "codex/event/mcp_startup_complete":
+                case "codex/event/deprecation_notice":
+                case "codex/event/warning":
+                case "codex/event/reasoning_content_delta":
+                case "codex/event/agent_reasoning_delta":
+                case "codex/event/agent_reasoning_section_break":
+                case "codex/event/agent_reasoning":
+                case "deprecationNotice":
                     break;
 
                 default:

@@ -13,315 +13,123 @@ MonoBehaviour:
   m_Name: SemanticClipRegistry
   m_EditorClassIdentifier: Assembly-CSharp::MateEngine.Codex.SemanticClipRegistry
   clips:
-  - id: idle_f01
-    actionType: 0
-    paramName: IdleIndex
-    paramValue: 0
-    boolFlag: 
-    boolValue: 0
-  - id: idle_f02
-    actionType: 0
-    paramName: IdleIndex
-    paramValue: 1
-    boolFlag: 
-    boolValue: 0
-  - id: idle_f03
-    actionType: 0
-    paramName: IdleIndex
-    paramValue: 2
-    boolFlag: 
-    boolValue: 0
-  - id: idle_f04
-    actionType: 0
-    paramName: IdleIndex
-    paramValue: 3
-    boolFlag: 
-    boolValue: 0
-  - id: idle_f05
-    actionType: 0
-    paramName: IdleIndex
-    paramValue: 4
-    boolFlag: 
-    boolValue: 0
-  - id: idle_f06
-    actionType: 0
-    paramName: IdleIndex
-    paramValue: 5
-    boolFlag: 
-    boolValue: 0
-  - id: idle_f07
-    actionType: 0
-    paramName: IdleIndex
-    paramValue: 6
-    boolFlag: 
-    boolValue: 0
-  - id: idle_f08
-    actionType: 0
-    paramName: IdleIndex
-    paramValue: 7
-    boolFlag: 
-    boolValue: 0
-  - id: idle_f09
-    actionType: 0
-    paramName: IdleIndex
-    paramValue: 8
-    boolFlag: 
-    boolValue: 0
-  - id: idle_f10
-    actionType: 0
-    paramName: IdleIndex
-    paramValue: 9
-    boolFlag: 
-    boolValue: 0
-  - id: idle_f11
-    actionType: 0
-    paramName: IdleIndex
-    paramValue: 10
-    boolFlag: 
-    boolValue: 0
-  - id: idle_f12
-    actionType: 0
-    paramName: IdleIndex
-    paramValue: 11
-    boolFlag: 
-    boolValue: 0
-  - id: idle_f13
-    actionType: 0
-    paramName: IdleIndex
-    paramValue: 12
-    boolFlag: 
-    boolValue: 0
-  - id: idle_f14
-    actionType: 0
-    paramName: IdleIndex
-    paramValue: 13
-    boolFlag: 
-    boolValue: 0
-  - id: idle_f15
-    actionType: 0
-    paramName: IdleIndex
-    paramValue: 14
-    boolFlag: 
-    boolValue: 0
-  - id: idle_f16
-    actionType: 0
-    paramName: IdleIndex
-    paramValue: 15
-    boolFlag: 
-    boolValue: 0
-  - id: idle_f17
-    actionType: 0
-    paramName: IdleIndex
-    paramValue: 16
-    boolFlag: 
-    boolValue: 0
-  - id: idle_f18
-    actionType: 0
-    paramName: IdleIndex
-    paramValue: 17
-    boolFlag: 
-    boolValue: 0
-  - id: idle_f19
-    actionType: 0
-    paramName: IdleIndex
-    paramValue: 18
-    boolFlag: 
-    boolValue: 0
-  - id: idle_f20
-    actionType: 0
-    paramName: IdleIndex
-    paramValue: 19
-    boolFlag: 
-    boolValue: 0
-  - id: idle_m01
-    actionType: 0
-    paramName: IdleIndex
-    paramValue: 0
-    boolFlag: isMale
-    boolValue: 1
-  - id: idle_m02
-    actionType: 0
-    paramName: IdleIndex
-    paramValue: 1
-    boolFlag: isMale
-    boolValue: 1
-  - id: idle_m03
-    actionType: 0
-    paramName: IdleIndex
-    paramValue: 2
-    boolFlag: isMale
-    boolValue: 1
-  - id: idle_m04
-    actionType: 0
-    paramName: IdleIndex
-    paramValue: 3
-    boolFlag: isMale
-    boolValue: 1
-  - id: idle_m05
-    actionType: 0
-    paramName: IdleIndex
-    paramValue: 4
-    boolFlag: isMale
-    boolValue: 1
-  - id: idle_m06
-    actionType: 0
-    paramName: IdleIndex
-    paramValue: 5
-    boolFlag: isMale
-    boolValue: 1
-  - id: idle_m07
-    actionType: 0
-    paramName: IdleIndex
-    paramValue: 6
-    boolFlag: isMale
-    boolValue: 1
-  - id: idle_m08
-    actionType: 0
-    paramName: IdleIndex
-    paramValue: 7
-    boolFlag: isMale
-    boolValue: 1
-  - id: idle_m09
-    actionType: 0
-    paramName: IdleIndex
-    paramValue: 8
-    boolFlag: isMale
-    boolValue: 1
-  - id: dance_f01
-    actionType: 0
-    paramName: DanceIndex
-    paramValue: 0
-    boolFlag: isDancing
-    boolValue: 1
-  - id: dance_f02
-    actionType: 0
-    paramName: DanceIndex
-    paramValue: 1
-    boolFlag: isDancing
-    boolValue: 1
-  - id: dance_f03
-    actionType: 0
-    paramName: DanceIndex
-    paramValue: 2
-    boolFlag: isDancing
-    boolValue: 1
-  - id: dance_f04
-    actionType: 0
-    paramName: DanceIndex
-    paramValue: 3
-    boolFlag: isDancing
-    boolValue: 1
-  - id: dance_f05
-    actionType: 0
-    paramName: DanceIndex
-    paramValue: 4
-    boolFlag: isDancing
-    boolValue: 1
-  - id: dance_f06
-    actionType: 0
-    paramName: DanceIndex
-    paramValue: 5
-    boolFlag: isDancing
-    boolValue: 1
-  - id: dance_f07
-    actionType: 0
-    paramName: DanceIndex
-    paramValue: 6
-    boolFlag: isDancing
-    boolValue: 1
-  - id: dance_f08
-    actionType: 0
-    paramName: DanceIndex
-    paramValue: 7
-    boolFlag: isDancing
-    boolValue: 1
-  - id: dance_f09
-    actionType: 0
-    paramName: DanceIndex
-    paramValue: 8
-    boolFlag: isDancing
-    boolValue: 1
-  - id: dance_f10
-    actionType: 0
-    paramName: DanceIndex
-    paramValue: 9
-    boolFlag: isDancing
-    boolValue: 1
-  - id: dance_f11
-    actionType: 0
-    paramName: DanceIndex
-    paramValue: 10
-    boolFlag: isDancing
-    boolValue: 1
-  - id: dance_f12
-    actionType: 0
-    paramName: DanceIndex
-    paramValue: 11
-    boolFlag: isDancing
-    boolValue: 1
-  - id: dance_f13
-    actionType: 0
-    paramName: DanceIndex
-    paramValue: 12
-    boolFlag: isDancing
-    boolValue: 1
-  - id: dance_f14
-    actionType: 0
-    paramName: DanceIndex
-    paramValue: 13
-    boolFlag: isDancing
-    boolValue: 1
-  - id: dance_m01
-    actionType: 0
-    paramName: DanceIndex
-    paramValue: 0
-    boolFlag: isDancing
-    boolValue: 1
-  - id: dance_m02
-    actionType: 0
-    paramName: DanceIndex
-    paramValue: 1
-    boolFlag: isDancing
-    boolValue: 1
-  - id: dance_m03
-    actionType: 0
-    paramName: DanceIndex
-    paramValue: 2
-    boolFlag: isDancing
-    boolValue: 1
-  - id: dance_m04
-    actionType: 0
-    paramName: DanceIndex
-    paramValue: 3
-    boolFlag: isDancing
-    boolValue: 1
   - id: face_joy
     actionType: 3
     paramName: Joy
     paramValue: 1
-    boolFlag: 
+    boolFlag:
     boolValue: 0
   - id: face_angry
     actionType: 3
     paramName: Angry
     paramValue: 1
-    boolFlag: 
+    boolFlag:
     boolValue: 0
   - id: face_sorrow
     actionType: 3
     paramName: Sorrow
     paramValue: 1
-    boolFlag: 
+    boolFlag:
     boolValue: 0
   - id: face_fun
     actionType: 3
     paramName: Fun
     paramValue: 1
-    boolFlag: 
+    boolFlag:
     boolValue: 0
   - id: face_neutral
     actionType: 3
     paramName: Neutral
     paramValue: 1
-    boolFlag: 
+    boolFlag:
     boolValue: 0
+  groups:
+  - groupId: idle
+    indexParam: IdleIndex
+    femaleMaxIndex: 19
+    maleMaxIndex: 8
+    secondaryBool:
+    secondaryValue: 0
+    clearBools:
+    - isDancing
+    - isSitting
+    - IsSleeping
+    revertDuration: 12
+  - groupId: dance
+    indexParam: DanceIndex
+    femaleMaxIndex: 12
+    maleMaxIndex: 3
+    secondaryBool: isDancing
+    secondaryValue: 1
+    clearBools:
+    - isSitting
+    - IsSleeping
+    revertDuration: 15
+  toggles:
+  - id: sit
+    paramName: isSitting
+    paramValue: 1
+    clearBools:
+    - isDancing
+    - IsSleeping
+    revertDuration: 11
+  - id: sleep
+    paramName: IsSleeping
+    paramValue: 1
+    clearBools:
+    - isDancing
+    - isSitting
+    revertDuration: 35
+  - id: walk_left
+    paramName: WalkLeft
+    paramValue: 1
+    clearBools:
+    - WalkRight
+    - isDancing
+    revertDuration: 3
+  - id: walk_right
+    paramName: WalkRight
+    paramValue: 1
+    clearBools:
+    - WalkLeft
+    - isDancing
+    revertDuration: 3
+  overrides:
+  - id: laugh
+    clips:
+    - {fileID: 7400000, guid: a5e8cc322431f4b43aa7762aab58f93d, type: 2}
+    clearBools:
+    - isDancing
+    - isSitting
+    - IsSleeping
+  - id: happy
+    clips:
+    - {fileID: 7400000, guid: 77f33fbbab3e94e41ac667133e1afdd0, type: 2}
+    clearBools:
+    - isDancing
+    - isSitting
+    - IsSleeping
+  - id: shy
+    clips:
+    - {fileID: 7400000, guid: b1505d9790a48b249b0f6beb2375420a, type: 2}
+    clearBools:
+    - isDancing
+    - isSitting
+    - IsSleeping
+  - id: hide
+    clips:
+    - {fileID: 7400000, guid: df7775d225575b74cb803dbbe541c568, type: 2}
+    clearBools:
+    - isDancing
+    - isSitting
+    - IsSleeping
+  - id: pose
+    clips:
+    - {fileID: 7400000, guid: 5186877c93fd8e54d842398bdf14e4b0, type: 2}
+    - {fileID: 7400000, guid: 2da7bb5eff0683c4db2ec14588270558, type: 2}
+    - {fileID: 7400000, guid: b66f0269d52c2b140a5a7135e3a5df76, type: 2}
+    - {fileID: 7400000, guid: 3fb513ae39d2cc24bb553acd93ed1c6b, type: 2}
+    clearBools:
+    - isDancing
+    - isSitting
+    - IsSleeping
