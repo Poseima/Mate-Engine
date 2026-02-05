@@ -93,3 +93,6 @@ Assets/StreamingAssets/codex-app-server
 Assets/StreamingAssets/codex-app-server.meta
 Assets/AddressableAssetsData/
 UserSettings/
+
+# Clip video exports
+ClipVideos/
