@@ -6,6 +6,45 @@ using MateEngine.Codex;
 
 public static class CodexSetupMenu
 {
+    [MenuItem("Mate Engine/Setup WhatsApp IPC Bridge", false, 99)]
+    static void SetupWhatsAppIPCBridge()
+    {
+        // Check if already exists
+        var existing = Object.FindFirstObjectByType<WhatsAppIPCBridge>(FindObjectsInactive.Include);
+        if (existing != null)
+        {
+            EditorUtility.DisplayDialog("WhatsApp IPC Bridge", "WhatsAppIPCBridge already exists on: " + existing.gameObject.name, "OK");
+            Selection.activeGameObject = existing.gameObject;
+            return;
+        }
+
+        // Find VRMModel (the avatar GameObject)
+        GameObject avatar = null;
+        foreach (var go in Object.FindObjectsByType<GameObject>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+        {
+            if (go.name == "VRMModel" && go.GetComponent<Animator>() != null)
+            {
+                avatar = go;
+                break;
+            }
+        }
+
+        if (avatar == null)
+        {
+            EditorUtility.DisplayDialog("WhatsApp IPC Bridge", "Cannot find 'VRMModel' GameObject with Animator.\nOpen the main scene first.", "OK");
+            return;
+        }
+
+        var bridge = Undo.AddComponent<WhatsAppIPCBridge>(avatar);
+        Selection.activeGameObject = avatar;
+
+        Debug.Log("[Codex Setup] WhatsAppIPCBridge added to " + avatar.name);
+        EditorUtility.DisplayDialog("WhatsApp IPC Bridge",
+            "WhatsAppIPCBridge added to '" + avatar.name + "'.\n\n" +
+            "IPC directory: ~/.mate-engine/ipc/whatsapp/\n" +
+            "Enable/disable via the Inspector toggle.", "OK");
+    }
+
     [MenuItem("Mate Engine/Setup Codex Bridge", false, 100)]
     static void SetupCodexBridge()
     {
