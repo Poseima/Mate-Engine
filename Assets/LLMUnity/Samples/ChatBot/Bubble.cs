@@ -39,15 +39,56 @@ namespace LLMUnitySamples
     {
         protected GameObject bubbleObject;
         protected GameObject imageObject;
+        protected GameObject textObject;
         public BubbleUI bubbleUI;
 
         public Bubble(Transform parent, BubbleUI ui, string name, string message)
         {
             bubbleUI = ui;
-            bubbleObject = CreateTextObject(parent, name, message, bubbleUI.bubbleWidth == -1, bubbleUI.bubbleHeight == -1);
-            imageObject = CreateImageObject(bubbleObject.transform, "Image");
+            bool horizontalStretch = bubbleUI.bubbleWidth == -1;
+            bool verticalStretch = bubbleUI.bubbleHeight == -1;
+
+            // bubbleObject: invisible container = text area (no Graphic, no Canvas)
+            // RectMask2D on the scroll viewport clips children since no child has its own Canvas.
+            bubbleObject = new GameObject(name, typeof(RectTransform));
+            bubbleObject.transform.SetParent(parent);
+
+            // VLG relays child preferred size to CSF (replaces original CSF-on-Text)
+            VerticalLayoutGroup vlg = bubbleObject.AddComponent<VerticalLayoutGroup>();
+            vlg.padding = new RectOffset(0, 0, 0, 0);
+            vlg.childControlWidth = true;
+            vlg.childControlHeight = true;
+            vlg.childForceExpandWidth = true;
+            vlg.childForceExpandHeight = false;
+
+            if (verticalStretch || horizontalStretch)
+            {
+                ContentSizeFitter csf = bubbleObject.AddComponent<ContentSizeFitter>();
+                if (verticalStretch) csf.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+                if (horizontalStretch) csf.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
+            }
+
+            // imageObject: first child → renders behind text (sibling order)
+            imageObject = new GameObject("Image", typeof(RectTransform), typeof(Image));
+            imageObject.transform.SetParent(bubbleObject.transform);
+            Image bubbleImage = imageObject.GetComponent<Image>();
+            bubbleImage.type = Image.Type.Sliced;
+            bubbleImage.sprite = bubbleUI.sprite;
+            bubbleImage.color = bubbleUI.bubbleColor;
+            LayoutElement imgLE = imageObject.AddComponent<LayoutElement>();
+            imgLE.ignoreLayout = true;
+
+            // textObject: second child → renders on top of image
+            textObject = new GameObject("Text", typeof(RectTransform), typeof(Text));
+            textObject.transform.SetParent(bubbleObject.transform);
+            Text textContent = textObject.GetComponent<Text>();
+            textContent.text = message;
+            if (bubbleUI.font != null)
+                textContent.font = bubbleUI.font;
+            textContent.fontSize = bubbleUI.fontSize;
+            textContent.color = bubbleUI.fontColor;
+
             SetBubblePosition(bubbleObject.GetComponent<RectTransform>(), imageObject.GetComponent<RectTransform>(), bubbleUI);
-            SetSortingOrder(bubbleObject, imageObject);
         }
 
         public void SyncParentRectTransform(RectTransform rectTransform)
@@ -57,41 +98,6 @@ namespace LLMUnitySamples
             rectTransform.pivot = new Vector2(0.5f, 0.5f);
             rectTransform.offsetMin = Vector2.zero;
             rectTransform.offsetMax = Vector2.zero;
-        }
-
-        protected GameObject CreateTextObject(Transform parent, string name, string message, bool horizontalStretch = true, bool verticalStretch = false)
-        {
-            // Create a child GameObject for the text
-            GameObject textObject = new GameObject(name, typeof(RectTransform), typeof(Text), typeof(Canvas));
-            textObject.transform.SetParent(parent);
-            Text textContent = textObject.GetComponent<Text>();
-
-            if (verticalStretch || horizontalStretch)
-            {
-                ContentSizeFitter contentSizeFitter = textObject.AddComponent<ContentSizeFitter>();
-                if (verticalStretch) contentSizeFitter.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-                if (horizontalStretch) contentSizeFitter.horizontalFit = ContentSizeFitter.FitMode.PreferredSize;
-            }
-            // Add text and font
-            textContent.text = message;
-            if (bubbleUI.font != null)
-                textContent.font = bubbleUI.font;
-            textContent.fontSize = bubbleUI.fontSize;
-            textContent.color = bubbleUI.fontColor;
-            return textObject;
-        }
-
-        protected GameObject CreateImageObject(Transform parent, string name)
-        {
-            GameObject imageObject = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Canvas));
-            imageObject.transform.SetParent(parent);
-            RectTransform imageRectTransform = imageObject.GetComponent<RectTransform>();
-            Image bubbleImage = imageObject.GetComponent<Image>();
-
-            bubbleImage.type = Image.Type.Sliced;
-            bubbleImage.sprite = bubbleUI.sprite;
-            bubbleImage.color = bubbleUI.bubbleColor;
-            return imageObject;
         }
 
         void SetBubblePosition(RectTransform bubbleRectTransform, RectTransform imageRectTransform, BubbleUI bubbleUI)
@@ -114,17 +120,6 @@ namespace LLMUnitySamples
             imageRectTransform.offsetMax = new Vector2(bubbleUI.textPadding, bubbleUI.textPadding);
         }
 
-        void SetSortingOrder(GameObject bubbleObject, GameObject imageObject)
-        {
-            // Set the sorting order to make bubbleObject render behind textObject
-            Canvas bubbleCanvas = bubbleObject.GetComponent<Canvas>();
-            bubbleCanvas.overrideSorting = true;
-            bubbleCanvas.sortingOrder = 2;
-            Canvas imageCanvas = imageObject.GetComponent<Canvas>();
-            imageCanvas.overrideSorting = true;
-            imageCanvas.sortingOrder = 1;
-        }
-
         public void OnResize(EmptyCallback callback)
         {
             RectTransformResizeHandler resizeHandler = bubbleObject.AddComponent<RectTransformResizeHandler>();
@@ -143,17 +138,18 @@ namespace LLMUnitySamples
 
         public Vector2 GetSize()
         {
-            return bubbleObject.GetComponent<RectTransform>().sizeDelta + imageObject.GetComponent<RectTransform>().sizeDelta;
+            return bubbleObject.GetComponent<RectTransform>().sizeDelta
+                 + new Vector2(2 * bubbleUI.textPadding, 2 * bubbleUI.textPadding);
         }
 
         public string GetText()
         {
-            return bubbleObject.GetComponent<Text>().text;
+            return textObject.GetComponent<Text>().text;
         }
 
         public void SetText(string text)
         {
-            bubbleObject.GetComponent<Text>().text = text;
+            textObject.GetComponent<Text>().text = text;
         }
 
         public void Destroy()
@@ -171,25 +167,22 @@ namespace LLMUnitySamples
         public InputBubble(Transform parent, BubbleUI ui, string name, string message, int lineHeight = 4) :
             base(parent, ui, name, emptyLines(message, lineHeight))
         {
-            Text textObjext = bubbleObject.GetComponent<Text>();
+            Text textObjext = textObject.GetComponent<Text>();
             RectTransform bubbleRectTransform = bubbleObject.GetComponent<RectTransform>();
-            bubbleObject.GetComponent<ContentSizeFitter>().enabled = false;
-            placeholderObject = CreatePlaceholderObject(bubbleObject.transform, bubbleRectTransform, textObjext.text);
+
+            // Disable auto-sizing for input bubble — size is fixed
+            ContentSizeFitter csf = bubbleObject.GetComponent<ContentSizeFitter>();
+            if (csf != null) csf.enabled = false;
+            VerticalLayoutGroup vlg = bubbleObject.GetComponent<VerticalLayoutGroup>();
+            if (vlg != null) vlg.enabled = false;
+
+            // textObject: stretch to fill parent (bubbleObject IS the text area)
+            RectTransform textRect = textObject.GetComponent<RectTransform>();
+            SyncParentRectTransform(textRect);
+
+            placeholderObject = CreatePlaceholderObject(bubbleObject.transform, textObjext.text);
             inputFieldObject = CreateInputFieldObject(bubbleObject.transform, textObjext, placeholderObject.GetComponent<Text>());
             inputField = inputFieldObject.GetComponent<InputField>();
-
-            // <<< Hier Orders fixen NUR für InputBubble >>>
-            Canvas textCanvas = bubbleObject.GetComponent<Canvas>();
-            if (textCanvas != null)
-            {
-                textCanvas.sortingOrder = 2;
-            }
-
-            Canvas imgCanvas = imageObject.GetComponent<Canvas>();
-            if (imgCanvas != null)
-            {
-                imgCanvas.sortingOrder = 2;
-            }
         }
 
 
@@ -201,21 +194,25 @@ namespace LLMUnitySamples
             return messageLines;
         }
 
-        GameObject CreatePlaceholderObject(Transform parent, RectTransform textRectTransform, string message)
+        GameObject CreatePlaceholderObject(Transform parent, string message)
         {
-            // Create a child GameObject for the placeholder text
-            GameObject placeholderObject = CreateTextObject(parent, "Placeholder", message, false, false);
-            RectTransform placeholderRectTransform = placeholderObject.GetComponent<RectTransform>();
-            placeholderRectTransform.sizeDelta = textRectTransform.sizeDelta;
-            placeholderRectTransform.anchoredPosition = textRectTransform.anchoredPosition;
-            placeholderRectTransform.localScale = Vector3.one;
-            SyncParentRectTransform(placeholderRectTransform);
+            GameObject placeholderObject = new GameObject("Placeholder", typeof(RectTransform), typeof(Text));
+            placeholderObject.transform.SetParent(parent);
+            Text textContent = placeholderObject.GetComponent<Text>();
+            textContent.text = message;
+            if (bubbleUI.font != null)
+                textContent.font = bubbleUI.font;
+            textContent.fontSize = bubbleUI.fontSize;
+            textContent.color = bubbleUI.fontColor;
+            RectTransform placeholderRect = placeholderObject.GetComponent<RectTransform>();
+            placeholderRect.localScale = Vector3.one;
+            SyncParentRectTransform(placeholderRect);
             return placeholderObject;
         }
 
         GameObject CreateInputFieldObject(Transform parent, Text textObject, Text placeholderTextObject)
         {
-            GameObject inputFieldObject = new GameObject("InputField", typeof(RectTransform), typeof(InputField), typeof(Canvas));
+            GameObject inputFieldObject = new GameObject("InputField", typeof(RectTransform), typeof(InputField));
             inputFieldObject.transform.SetParent(parent);
             inputField = inputFieldObject.GetComponent<InputField>();
             inputField.textComponent = textObject;
@@ -233,6 +230,7 @@ namespace LLMUnitySamples
         public void FixCaretSorting()
         {
             GameObject caret = GameObject.Find($"{inputField.name} Input Caret");
+            if (caret == null) return;
             Canvas bubbleCanvas = caret.GetComponent<Canvas>();
             if (bubbleCanvas == null)
             {
