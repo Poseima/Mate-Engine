@@ -11,6 +11,7 @@ using System.Reflection;
 using UniVRM10;
 using System;
 using Newtonsoft.Json;
+using MateEngine.Codex;
 
 #if UNITY_EDITOR
 using UnityEditor;
@@ -105,17 +106,35 @@ public class VRMLoader : MonoBehaviour
     {
         if (isLoading) return;
 
+        Debug.Log("[VRMLoader] OpenFileDialogAndLoadVRM");
+
         isLoading = true;
         var extensions = new[] { new ExtensionFilter("Model Files", "vrm", "me", "prefab") };
-        string[] paths = StandaloneFileBrowser.OpenFilePanel("Select Model File", "", extensions, false);
-        if (paths.Length > 0 && !string.IsNullOrEmpty(paths[0]))
-            LoadVRM(paths[0]);
-
-        isLoading = false;
+        MEFileDialog.OpenFilePanelAsync("Select Model File", "", extensions, false, paths =>
+        {
+            try
+            {
+                if (paths != null && paths.Length > 0 && !string.IsNullOrEmpty(paths[0]))
+                {
+                    Debug.Log($"[VRMLoader] File selected: '{paths[0]}'");
+                    LoadVRM(paths[0]);
+                }
+                else
+                {
+                    Debug.Log("[VRMLoader] File picker cancelled");
+                }
+            }
+            finally
+            {
+                isLoading = false;
+            }
+        });
     }
 
     public async void LoadVRM(string path)
     {
+        Debug.Log($"[VRMLoader] LoadVRM called with path: '{path}'");
+
         if (path.EndsWith(".me", StringComparison.OrdinalIgnoreCase))
         {
             LoadAssetBundleModel(path);
@@ -129,9 +148,11 @@ public class VRMLoader : MonoBehaviour
 
         if (IsDLCReference(path))
         {
+            Debug.Log($"[VRMLoader] Loading DLC avatar: '{path}'");
             GameObject prefab = FindDLCByName(path);
             if (prefab != null)
             {
+                Debug.Log($"[VRMLoader] Found DLC prefab: '{prefab.name}'");
                 GameObject instance = Instantiate(prefab);
                 FinalizeLoadedModel(instance, path);
                 if (SaveLoadHandler.Instance != null)
@@ -147,7 +168,13 @@ public class VRMLoader : MonoBehaviour
             return;
         }
 
-        if (!File.Exists(path)) return;
+        if (!File.Exists(path))
+        {
+            Debug.LogWarning($"[VRMLoader] VRM file not found, skipping load: '{path}'");
+            return;
+        }
+
+        Debug.Log($"[VRMLoader] Loading VRM file: '{path}'");
 
         try
         {
@@ -307,6 +334,10 @@ public class VRMLoader : MonoBehaviour
 
         StartCoroutine(ReleaseRamAndUnloadAssetsCo());
         SettingsHandlerUtility.ReloadAllSettingsHandlers();
+
+        // Notify avatar config system of change (pass displayName for auto-create)
+        Debug.Log($"[VRMLoader] FinalizeLoadedModel complete, notifying AvatarConfig: path='{path}', displayName='{displayName}'");
+        AvatarConfigLoader.Instance?.OnAvatarChanged(path, displayName);
     }
 
     public Texture2D MakeReadableCopy(Texture texture)
@@ -326,6 +357,8 @@ public class VRMLoader : MonoBehaviour
 
     public void ResetModel()
     {
+        Debug.Log("[VRMLoader] ResetModel called");
+
         string vrmFolder = Path.Combine(Application.persistentDataPath, "VRM");
         if (Directory.Exists(vrmFolder))
             Directory.Delete(vrmFolder, true);
@@ -343,6 +376,10 @@ public class VRMLoader : MonoBehaviour
             MEModLoader.Instance.AssignHandlersForCurrentAvatar(mainModel);
 
         StartCoroutine(ReleaseRamAndUnloadAssetsCo());
+
+        // Notify avatar config system of reset (empty path = default avatar)
+        Debug.Log("[VRMLoader] ResetModel: notifying AvatarConfig with empty path");
+        AvatarConfigLoader.Instance?.OnAvatarChanged("");
     }
 
     private void DisableMainModel()
@@ -466,6 +503,8 @@ public class VRMLoader : MonoBehaviour
 
     public void ActivateDefaultModel()
     {
+        Debug.Log("[VRMLoader] ActivateDefaultModel called");
+
         ClearPreviousCustomModel(skipRawImageCleanup: true);
         EnableMainModel();
 
@@ -480,6 +519,10 @@ public class VRMLoader : MonoBehaviour
 
         StartCoroutine(ReleaseRamAndUnloadAssetsCo());
         SettingsHandlerUtility.ReloadAllSettingsHandlers();
+
+        // Notify avatar config system of change (empty path = default avatar)
+        Debug.Log("[VRMLoader] ActivateDefaultModel: notifying AvatarConfig with empty path");
+        AvatarConfigLoader.Instance?.OnAvatarChanged("");
     }
 
     private System.Collections.IEnumerator ReleaseRamAndUnloadAssetsCo()

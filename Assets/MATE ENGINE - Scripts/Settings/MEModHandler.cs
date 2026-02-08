@@ -68,24 +68,26 @@ public class MEModHandler : MonoBehaviour
     void OpenFileDialogAndLoadMod()
     {
         var ext = new[] { new ExtensionFilter("MateEngine Files", "me", "unity3d") };
-        var paths = StandaloneFileBrowser.OpenFilePanel("Select Mod or Dance Asset", ".", ext, false);
-        if (paths.Length == 0 || string.IsNullOrEmpty(paths[0])) return;
-
-        var src = paths[0];
-        var dest = Path.Combine(modFolderPath, Path.GetFileName(src));
-        try { File.Copy(src, dest, true); } catch { }
-
-        if (dest.EndsWith(".me", StringComparison.OrdinalIgnoreCase))
+        MEFileDialog.OpenFilePanelAsync("Select Mod or Dance Asset", ".", ext, false, paths =>
         {
-            LoadME(dest);
-        }
-        else if (dest.EndsWith(".unity3d", StringComparison.OrdinalIgnoreCase))
-        {
-            LoadUnity3D(dest, true, false);
-        }
+            if (paths == null || paths.Length == 0 || string.IsNullOrEmpty(paths[0])) return;
 
-        var dance = FindFirstObjectByType<CustomDancePlayer.AvatarDanceHandler>();
-        if (dance != null) dance.RescanMods();
+            var src = paths[0];
+            var dest = Path.Combine(modFolderPath, Path.GetFileName(src));
+            try { File.Copy(src, dest, true); } catch { }
+
+            if (dest.EndsWith(".me", StringComparison.OrdinalIgnoreCase))
+            {
+                LoadME(dest);
+            }
+            else if (dest.EndsWith(".unity3d", StringComparison.OrdinalIgnoreCase))
+            {
+                LoadUnity3D(dest, true, false);
+            }
+
+            var dance = FindFirstObjectByType<CustomDancePlayer.AvatarDanceHandler>();
+            if (dance != null) dance.RescanMods();
+        });
     }
 
     void LoadUnity3D(string path, bool addToUI, bool respectSavedState)

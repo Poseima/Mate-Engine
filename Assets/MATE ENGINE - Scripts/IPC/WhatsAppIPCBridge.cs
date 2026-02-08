@@ -16,6 +16,7 @@ public class WhatsAppIPCBridge : MonoBehaviour
     {
         public string id;
         public string type;
+        public string groupFolder;
         public string chatJid;
         public string senderName;
         public string text;
@@ -44,7 +45,9 @@ public class WhatsAppIPCBridge : MonoBehaviour
     float lastNotReadyLog;
     string currentRequestId;
     string currentChatJid;
+    string currentGroupFolder;
     Animator avatarAnimator;
+    AvatarConfigLoader configLoader;
 
     void Awake()
     {
@@ -57,6 +60,12 @@ public class WhatsAppIPCBridge : MonoBehaviour
         Directory.CreateDirectory(requestsDir);
         Directory.CreateDirectory(responsesDir);
         Directory.CreateDirectory(errorsDir);
+
+        // Initialize avatar config loader with hot-reload
+        configLoader = new AvatarConfigLoader();
+        configLoader.LoadAll();
+        configLoader.StartWatching();
+        if (debugLog) Debug.Log($"[WhatsAppIPC] Loaded {configLoader.AvatarConfigs.Count} avatar config(s)");
 
         // Cleanup stale files on startup
         CleanupStaleFiles(requestsDir, TimeSpan.FromMinutes(5));
@@ -81,6 +90,7 @@ public class WhatsAppIPCBridge : MonoBehaviour
         running = false;
         try { pollThread?.Join(2000); } catch { }
         pollThread = null;
+        configLoader?.StopWatching();
     }
 
     void PollLoop()
@@ -98,7 +108,9 @@ public class WhatsAppIPCBridge : MonoBehaviour
                         try
                         {
                             string json = File.ReadAllText(file);
+                            Debug.Log($"[WhatsAppIPC] Raw JSON: {json}");
                             var req = JsonConvert.DeserializeObject<WhatsAppRequest>(json);
+                            Debug.Log($"[WhatsAppIPC] Parsed: groupFolder='{req?.groupFolder}', type='{req?.type}'");
                             if (req != null && req.type == "whatsapp_message"
                                 && !string.IsNullOrEmpty(req.text))
                             {
@@ -126,6 +138,9 @@ public class WhatsAppIPCBridge : MonoBehaviour
 
     void Update()
     {
+        // Pump hot-reload config changes on main thread
+        configLoader?.PumpChanges();
+
         if (!enableWhatsAppBridge) return;
 
         if (incomingQueue.TryDequeue(out var request))
@@ -147,64 +162,43 @@ public class WhatsAppIPCBridge : MonoBehaviour
     {
         // Silently ack the previous request so NanoClaw's waiter completes (empty text = no WhatsApp message)
         if (!string.IsNullOrEmpty(currentRequestId))
-            WriteResponse(currentRequestId, currentChatJid, "");
+            WriteResponse(currentRequestId, currentChatJid, "", groupFolder: currentGroupFolder);
 
         // Send new message to the running turn (app-server injects into pending input)
         ProcessWhatsAppMessage(request);
     }
 
-    void InitializeThread()
-    {
-        if (threadInitializing) return;
-        var bridge = CodexBridge.Instance;
-        if (bridge == null || !bridge.IsConnected || !bridge.IsAuthenticated) return;
-
-        threadInitializing = true;
-        if (debugLog) Debug.Log("[WhatsAppIPC] Auto-initializing Codex thread...");
-
-        var data = SaveLoadHandler.Instance?.data;
-        bool animDirectives = data?.enableAnimationDirectives ?? false;
-        string systemPrompt = bridge.BuildSystemPrompt("", animDirectives);
-        string savedThread = data?.codexThreadId;
-        string model = data?.codexModel ?? "";
-
-        if (!string.IsNullOrEmpty(savedThread))
-        {
-            bridge.ResumeThread(savedThread, (ok) =>
-            {
-                if (!ok)
-                    bridge.StartThread(model, systemPrompt, OnThreadReady);
-                else
-                    OnThreadReady(savedThread);
-            });
-        }
-        else
-        {
-            bridge.StartThread(model, systemPrompt, OnThreadReady);
-        }
-    }
-
-    void OnThreadReady(string threadId)
-    {
-        if (debugLog) Debug.Log("[WhatsAppIPC] Thread ready: " + threadId);
-
-        if (SaveLoadHandler.Instance != null)
-        {
-            SaveLoadHandler.Instance.data.codexThreadId = threadId;
-            SaveLoadHandler.Instance.SaveToDisk();
-        }
-
-        threadInitializing = false;
-    }
 
     void ProcessWhatsAppMessage(WhatsAppRequest request)
     {
+        // Lookup avatar for this group
+        string groupFolder = request.groupFolder ?? "_default";
+        string avatarId = configLoader.GetAvatarForGroup(groupFolder);
+
+        // Skip unassigned groups - no response
+        if (avatarId == null)
+        {
+            if (debugLog) Debug.Log($"[WhatsAppIPC] Ignoring message from unassigned group '{groupFolder}'");
+            processingMessage = false;
+            return;
+        }
+
+        var avatarConfig = configLoader.GetAvatarConfig(avatarId);
+
+        if (avatarConfig == null)
+        {
+            Debug.LogError($"[WhatsAppIPC] No config found for avatar '{avatarId}', group '{groupFolder}'");
+            WriteResponse(request.id, request.chatJid, "Configuration error", groupFolder: groupFolder);
+            processingMessage = false;
+            return;
+        }
+
         var bridge = CodexBridge.Instance;
         if (bridge == null || !bridge.IsConnected || string.IsNullOrEmpty(bridge.CurrentThreadId))
         {
-            // Try to auto-initialize a thread
+            // Try to auto-initialize a thread with avatar config
             if (!threadInitializing)
-                InitializeThread();
+                InitializeThreadForAvatar(avatarId, groupFolder, avatarConfig);
 
             // Throttle log to once per second
             if (debugLog && Time.time - lastNotReadyLog > 1f)
@@ -219,20 +213,22 @@ public class WhatsAppIPCBridge : MonoBehaviour
 
         currentRequestId = request.id;
         currentChatJid = request.chatJid;
+        currentGroupFolder = groupFolder;
 
         // Build input text with sender context and optional media path
         string inputText = $"[WhatsApp from {request.senderName}]: {request.text}";
         if (!string.IsNullOrEmpty(request.mediaPath))
             inputText += $"\n[Attached file: {request.mediaPath} (type: {request.mediaType ?? "unknown"})]";
 
-        if (debugLog) Debug.Log("[WhatsAppIPC] Sending to Codex: " + inputText);
+        if (debugLog) Debug.Log($"[WhatsAppIPC] [{groupFolder}→{avatarId}] Sending to Codex: " + inputText);
 
         string fullResponse = "";
 
-        // Setup animation directive processor
+        // Setup animation directive processor based on avatar config and animation mode
         AnimationDirectiveProcessor animProc = null;
-        var data = SaveLoadHandler.Instance?.data;
-        if (data != null && data.enableAnimationDirectives)
+        bool shouldProcessAnimations = ShouldProcessAnimations(avatarId, avatarConfig);
+
+        if (shouldProcessAnimations)
         {
             animProc = new AnimationDirectiveProcessor();
             if (avatarAnimator == null) avatarAnimator = GetComponent<Animator>();
@@ -271,14 +267,98 @@ public class WhatsAppIPCBridge : MonoBehaviour
             if (debugLog && attachments.Count > 0)
                 Debug.Log("[WhatsAppIPC] Attachments: " + string.Join(", ", attachments));
 
-            WriteResponse(request.id, request.chatJid, cleanResponse, attachments);
+            WriteResponse(request.id, request.chatJid, cleanResponse, attachments, groupFolder);
             processingMessage = false;
         };
 
-        bridge.SendMessage(inputText, onStream, onComplete);
+        // Pass avatar config values to override app settings
+        bridge.SendMessage(inputText, onStream, onComplete,
+            avatarConfig.model, avatarConfig.modelProvider, avatarConfig.workingDirectory,
+            avatarConfig.approvalPolicy, avatarConfig.sandboxPolicy);
     }
 
-    void WriteResponse(string requestId, string chatJid, string text, List<string> attachments = null)
+    bool ShouldProcessAnimations(string avatarId, ResolvedAvatarConfig config)
+    {
+        if (!config.enableAnimationDirectives)
+        {
+            if (debugLog) Debug.Log($"[WhatsAppIPC] Animation disabled for avatar '{avatarId}'");
+            return false;
+        }
+
+        var globalConfig = configLoader.GlobalConfig;
+        if (globalConfig.animationMode == "rush")
+        {
+            if (debugLog) Debug.Log($"[WhatsAppIPC] Animation mode: RUSH - processing animations for '{avatarId}'");
+            return true;
+        }
+
+        // Focus mode: only active avatar's groups trigger animations
+        bool isFocused = avatarId == globalConfig.activeAvatar;
+        if (debugLog) Debug.Log($"[WhatsAppIPC] Animation mode: FOCUS - avatar '{avatarId}' {(isFocused ? "IS" : "is NOT")} active (active: '{globalConfig.activeAvatar}')");
+        return isFocused;
+    }
+
+    void InitializeThreadForAvatar(string avatarId, string groupFolder, ResolvedAvatarConfig config)
+    {
+        if (threadInitializing) return;
+        var bridge = CodexBridge.Instance;
+        if (bridge == null || !bridge.IsConnected || !bridge.IsAuthenticated) return;
+
+        threadInitializing = true;
+        if (debugLog) Debug.Log($"[WhatsAppIPC] Initializing thread for avatar '{avatarId}', group '{groupFolder}'...");
+
+        // Build system prompt from avatar config
+        string baseInstructions = config.baseInstructionsContent ?? "";
+        string devInstructions = config.developerInstructionsContent ?? "";
+        string systemPrompt = bridge.BuildSystemPrompt(baseInstructions);
+
+        if (debugLog) Debug.Log($"[WhatsAppIPC] Developer instructions: {(string.IsNullOrEmpty(devInstructions) ? "(none)" : devInstructions.Length + " chars")}");
+
+        // Check for existing thread
+        string savedThreadId = configLoader.GetThreadId(avatarId, groupFolder);
+        string model = config.model ?? "";
+        string provider = config.modelProvider ?? "";
+
+        if (!string.IsNullOrEmpty(savedThreadId))
+        {
+            if (debugLog) Debug.Log($"[WhatsAppIPC] Resuming existing thread '{savedThreadId}' for {avatarId}/{groupFolder}");
+            bridge.ResumeThread(savedThreadId, (ok) =>
+            {
+                if (!ok)
+                {
+                    if (debugLog) Debug.Log($"[WhatsAppIPC] Resume failed, creating new thread for {avatarId}/{groupFolder}");
+                    StartNewThread(avatarId, groupFolder, model, provider, systemPrompt, devInstructions);
+                }
+                else
+                    OnThreadReadyForAvatar(avatarId, groupFolder, savedThreadId);
+            });
+        }
+        else
+        {
+            if (debugLog) Debug.Log($"[WhatsAppIPC] No saved thread, creating new for {avatarId}/{groupFolder}");
+            StartNewThread(avatarId, groupFolder, model, provider, systemPrompt, devInstructions);
+        }
+    }
+
+    void StartNewThread(string avatarId, string groupFolder, string model, string provider, string systemPrompt, string developerInstructions)
+    {
+        var bridge = CodexBridge.Instance;
+        bridge.StartThread(model, provider, systemPrompt, developerInstructions, (threadId) =>
+        {
+            OnThreadReadyForAvatar(avatarId, groupFolder, threadId);
+        });
+    }
+
+    void OnThreadReadyForAvatar(string avatarId, string groupFolder, string threadId)
+    {
+        if (debugLog) Debug.Log($"[WhatsAppIPC] Thread ready for {avatarId}/{groupFolder}: {threadId}");
+
+        // Save thread ID to avatar state
+        configLoader.UpdateThreadId(avatarId, groupFolder, threadId);
+        threadInitializing = false;
+    }
+
+    void WriteResponse(string requestId, string chatJid, string text, List<string> attachments = null, string groupFolder = null)
     {
         try
         {
@@ -286,6 +366,7 @@ public class WhatsAppIPCBridge : MonoBehaviour
             {
                 ["id"] = requestId,
                 ["type"] = "whatsapp_response",
+                ["groupFolder"] = groupFolder ?? "_default",
                 ["chatJid"] = chatJid,
                 ["text"] = text,
                 ["attachments"] = new JArray(attachments?.ToArray() ?? Array.Empty<string>()),

@@ -177,9 +177,13 @@ namespace MateEngine.Codex
 
         void DispatchLine(string line)
         {
+            // DEBUG: log every line from binary
+            Enqueue(() => Debug.Log("[Codex RECV] " + (line.Length > 500 ? line.Substring(0, 500) + "..." : line)));
+
             // 1. Try as RPC response (id + result/error, no method)
             if (CodexLineParser.IsResponse(line, out var respId, out var result, out var error))
             {
+                Enqueue(() => Debug.Log("[Codex] Response id=" + respId));
                 if (pendingRequests.TryRemove(respId, out var cb))
                     Enqueue(() => cb(result, error));
                 return;
@@ -188,6 +192,7 @@ namespace MateEngine.Codex
             // 2. Try as server-to-client request (id + method) — needs a response
             if (CodexLineParser.IsServerRequest(line, out var reqId, out var reqMethod, out var reqParams))
             {
+                Enqueue(() => Debug.Log("[Codex] ServerRequest method=" + reqMethod + " id=" + reqId));
                 HandleServerRequest(reqId, reqMethod, reqParams);
                 return;
             }
@@ -195,6 +200,7 @@ namespace MateEngine.Codex
             // 3. Try as notification (method, no id)
             if (CodexLineParser.IsNotification(line, out var method, out var @params))
             {
+                Enqueue(() => Debug.Log("[Codex] Notification method=" + method));
                 HandleNotification(method, @params);
                 return;
             }
@@ -265,14 +271,6 @@ namespace MateEngine.Codex
 
                 // ── Raw codex/event format (Chat Completions / aggregated) ─
 
-                case "codex/event/agent_message":
-                    // Aggregated full message (Chat API providers like MiniMax)
-                    Debug.Log("[Codex RAW agent_message] " + @params?.ToString(Formatting.None));
-                    var fullMsg = @params?["msg"]?["message"]?.Value<string>() ?? "";
-                    if (!string.IsNullOrEmpty(fullMsg))
-                        Enqueue(() => OnStreamDelta?.Invoke(fullMsg));
-                    break;
-
                 case "codex/event/task_complete":
                     // Fires for all providers; only act on it if the v2 turn/completed
                     // didn't already arrive (i.e. CurrentTurnId is still set).
@@ -303,6 +301,7 @@ namespace MateEngine.Codex
                 case "account/updated":
                 case "account/rateLimits/updated":
                 case "turn/diff/updated":
+                case "codex/event/agent_message":
                 case "codex/event/agent_message_content_delta":
                 case "codex/event/agent_message_delta":
                 case "codex/event/item_started":

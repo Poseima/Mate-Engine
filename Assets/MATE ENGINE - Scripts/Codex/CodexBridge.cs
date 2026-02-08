@@ -101,6 +101,15 @@ namespace MateEngine.Codex
             if (!string.IsNullOrEmpty(apiKey))
                 env["CODEX_API_KEY"] = apiKey;
 
+            // Prepend skill bin dir to PATH so container wrapper (agent-browser) is found first
+            string skillBin = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                ".codex", "skills", "agent-browser", "bin");
+            if (env.TryGetValue("PATH", out string currentPath))
+                env["PATH"] = skillBin + ":" + currentPath;
+            else
+                env["PATH"] = skillBin + ":/usr/local/bin:/usr/bin:/bin";
+
             // Wire protocol events
             protocol.OnStreamDelta += HandleDelta;
             protocol.OnTurnCompleted += HandleTurnCompleted;
@@ -117,6 +126,10 @@ namespace MateEngine.Codex
                     name = "MateEngine",
                     title = "Mate Engine",
                     version = Application.version ?? "1.0.0"
+                },
+                capabilities = new ClientCapabilities
+                {
+                    experimentalApi = true
                 }
             };
 
@@ -308,7 +321,7 @@ namespace MateEngine.Codex
 
         // ── Thread management ──────────────────────────────────────
 
-        public void StartThread(string model, string systemPrompt, Action<string> onThreadStarted = null)
+        public void StartThread(string model, string provider, string systemPrompt, string developerInstructions = null, Action<string> onThreadStarted = null)
         {
             string dawnHome = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".dawn");
@@ -316,27 +329,32 @@ namespace MateEngine.Codex
 
             Debug.Log("[CodexBridge] System prompt:\n" + systemPrompt);
 
-            // Load dawn.md as developer instructions (agent behavior rules)
-            string dawnInstructions = null;
-            string dawnPath = Path.Combine(Application.streamingAssetsPath, "codex-dawn.md");
-            if (File.Exists(dawnPath))
+            // Use provided developer instructions, or fall back to codex-dawn.md
+            string devInstructions = developerInstructions;
+            if (string.IsNullOrEmpty(devInstructions))
             {
-                dawnInstructions = File.ReadAllText(dawnPath);
-                Debug.Log("[CodexBridge] Loaded dawn instructions (" + dawnInstructions.Length + " chars) from: " + dawnPath);
+                string dawnPath = Path.Combine(Application.streamingAssetsPath, "codex-dawn.md");
+                if (File.Exists(dawnPath))
+                {
+                    devInstructions = File.ReadAllText(dawnPath);
+                    Debug.Log("[CodexBridge] Loaded dawn instructions (" + devInstructions.Length + " chars) from: " + dawnPath);
+                }
+                else
+                {
+                    Debug.LogWarning("[CodexBridge] codex-dawn.md not found at: " + dawnPath);
+                }
             }
             else
             {
-                Debug.LogWarning("[CodexBridge] codex-dawn.md not found at: " + dawnPath);
+                Debug.Log("[CodexBridge] Using provided developer instructions (" + devInstructions.Length + " chars)");
             }
-
-            string provider = SaveLoadHandler.Instance?.data?.codexProvider;
 
             var p = new ThreadStartParams
             {
                 model = string.IsNullOrEmpty(model) ? null : model,
                 modelProvider = string.IsNullOrEmpty(provider) ? null : provider,
                 baseInstructions = systemPrompt,
-                developerInstructions = dawnInstructions,
+                developerInstructions = devInstructions,
                 approvalPolicy = "never",
                 cwd = dawnHome,
             };
@@ -376,6 +394,20 @@ namespace MateEngine.Codex
 
         public void SendMessage(string text, Action<string> onStream, Action onComplete)
         {
+            var config = AvatarConfigLoader.Instance?.GetActiveAvatarConfig();
+            SendMessage(text, onStream, onComplete,
+                config?.model, config?.modelProvider, config?.workingDirectory,
+                config?.approvalPolicy, config?.sandboxPolicy);
+        }
+
+        /// <summary>
+        /// Send a message with optional config overrides (for per-avatar config).
+        /// If not specified, falls back to app settings or defaults.
+        /// </summary>
+        public void SendMessage(string text, Action<string> onStream, Action onComplete,
+            string model, string provider, string workingDirectory,
+            string approvalPolicy, string sandboxPolicy)
+        {
             if (!IsConnected || !protocol.IsRunning)
             {
                 Debug.LogWarning("[CodexBridge] Not connected. Ignoring message.");
@@ -394,8 +426,46 @@ namespace MateEngine.Codex
             currentStreamCb = onStream;
             currentCompleteCb = onComplete;
 
-            string dawnHome = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".dawn");
+            // Use provided workingDirectory or fall back to default ~/.dawn
+            string cwd = workingDirectory;
+            if (string.IsNullOrEmpty(cwd))
+            {
+                cwd = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".dawn");
+            }
+            else if (cwd.StartsWith("~/"))
+            {
+                cwd = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                    cwd.Substring(2));
+            }
+
+            // Convert sandboxPolicy string (kebab-case from avatar config) to
+            // Codex protocol SandboxPolicy type (camelCase).
+            // Valid types: dangerFullAccess, readOnly, externalSandbox, workspaceWrite
+            var sandboxParam = new SandboxPolicyParam();
+            if (!string.IsNullOrEmpty(sandboxPolicy))
+            {
+                sandboxParam.type = sandboxPolicy switch
+                {
+                    "workspace-write"    => "workspaceWrite",
+                    "workspaceWrite"     => "workspaceWrite",
+                    "danger-full-access" => "dangerFullAccess",
+                    "dangerFullAccess"   => "dangerFullAccess",
+                    "read-only"          => "readOnly",
+                    "readOnly"           => "readOnly",
+                    "external-sandbox"   => "externalSandbox",
+                    "externalSandbox"    => "externalSandbox",
+                    _ => "workspaceWrite"
+                };
+
+                if (sandboxParam.type == "workspaceWrite"
+                    && sandboxPolicy != "workspace-write"
+                    && sandboxPolicy != "workspaceWrite")
+                {
+                    Debug.LogWarning($"[CodexBridge] Unrecognized sandboxPolicy '{sandboxPolicy}', defaulting to 'workspaceWrite'");
+                }
+            }
 
             var p = new TurnStartParams
             {
@@ -404,13 +474,13 @@ namespace MateEngine.Codex
                 {
                     new UserInput { type = "text", text = text }
                 },
-                approvalPolicy = "never",
-                sandboxPolicy = new SandboxPolicyParam(),
-                cwd = dawnHome,
+                approvalPolicy = !string.IsNullOrEmpty(approvalPolicy) ? approvalPolicy : "never",
+                sandboxPolicy = sandboxParam,
+                cwd = cwd,
             };
 
-            // Override model + provider per-turn to match current Codex Configuration
-            string currentModel = SaveLoadHandler.Instance?.data?.codexModel ?? "";
+            // Avatar config is authoritative — use provided model, don't fall back
+            string currentModel = model ?? "";
             if (!string.IsNullOrEmpty(currentModel))
             {
                 p.collaborationMode = new CollaborationModeParam
@@ -419,7 +489,8 @@ namespace MateEngine.Codex
                 };
             }
 
-            string currentProvider = SaveLoadHandler.Instance?.data?.codexProvider ?? "";
+            // Avatar config is authoritative — use provided provider, don't fall back
+            string currentProvider = provider ?? "";
             if (!string.IsNullOrEmpty(currentProvider))
                 p.providerId = currentProvider;
 
@@ -491,25 +562,9 @@ namespace MateEngine.Codex
 
         // ── System prompt helper ───────────────────────────────────
 
-        public string BuildSystemPrompt(string userPrompt, bool includeClipTable)
+        public string BuildSystemPrompt(string userPrompt)
         {
-            string basePrompt = "";
-            string basePath = Path.Combine(Application.streamingAssetsPath, "codex-system-prompt.md");
-            if (File.Exists(basePath))
-                basePrompt = File.ReadAllText(basePath);
-
-            string combined = basePrompt;
-            if (!string.IsNullOrEmpty(userPrompt))
-                combined += "\n\n" + userPrompt;
-
-            if (includeClipTable)
-            {
-                string clipPath = Path.Combine(Application.streamingAssetsPath, "codex-clip-table.md");
-                if (File.Exists(clipPath))
-                    combined += "\n\n" + File.ReadAllText(clipPath);
-            }
-
-            return combined;
+            return userPrompt ?? "";
         }
 
         // ── Shell environment loader ────────────────────────────────

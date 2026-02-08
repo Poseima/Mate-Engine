@@ -1,4 +1,5 @@
 using UnityEngine;
+using Kirurobo;
 
 public class AvatarBigScreenScreenSaver : MonoBehaviour
 {
@@ -22,9 +23,9 @@ public class AvatarBigScreenScreenSaver : MonoBehaviour
     public string inspectorEvent;
     [SerializeField] private string inspectorTimeoutLabel;
 
-    private static readonly int[] TimeoutSteps = { 30, 60, 300, 900, 1800, 2700, 3600, 5400, 7200, 9000, 10800 };
+    private static readonly int[] TimeoutSteps = { 30, 60, 300, 600, 900, 1800, 2700, 3600, 5400, 7200, 9000, 10800 };
     private static readonly string[] TimeoutLabels = {
-        "30s", "1 min", "5 min", "15 min", "30 min", "45 min", "1 h", "1.5 h", "2 h", "2.5 h", "3 h"
+        "30s", "1 min", "5 min", "10 min", "15 min", "30 min", "45 min", "1 h", "1.5 h", "2 h", "2.5 h", "3 h"
     };
 
     private AvatarBigScreenHandler bigScreenHandler;
@@ -171,7 +172,7 @@ public class AvatarBigScreenScreenSaver : MonoBehaviour
 
     Vector2 GetGlobalMousePosition()
     {
-        return new Vector2(Input.mousePosition.x, Input.mousePosition.y);
+        return UniWindowController.GetCursorPosition();
     }
 
     bool IsAnyKeyPressed()

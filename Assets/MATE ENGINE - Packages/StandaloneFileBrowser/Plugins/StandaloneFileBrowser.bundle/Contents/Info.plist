@@ -36,8 +36,10 @@
 	<string>GM</string>
 	<key>DTSDKBuild</key>
 	<string>18A384</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>11.0</string>
 	<key>DTSDKName</key>
-	<string>macosx10.14</string>
+	<string>macosx</string>
 	<key>DTXcode</key>
 	<string>1000</string>
 	<key>DTXcodeBuild</key>

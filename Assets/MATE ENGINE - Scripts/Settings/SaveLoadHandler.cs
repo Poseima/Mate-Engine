@@ -148,7 +148,7 @@ public class SaveLoadHandler : MonoBehaviour
         public string selectedLocaleCode = "en";
         public bool enableIK = true;
 
-        public int bigScreenScreenSaverTimeoutIndex = 0;
+        public int bigScreenScreenSaverTimeoutIndex = 3;
         public bool bigScreenScreenSaverEnabled = false;
         public float windowSitYOffset = 0f;
 

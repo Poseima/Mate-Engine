@@ -3,6 +3,7 @@ using UnityEngine.UI;
 using TMPro;
 using MateEngine.Codex;
 using System.Collections.Generic;
+using System.IO;
 
 public class SettingsHandlerCodex : MonoBehaviour
 {
@@ -177,7 +178,7 @@ public class SettingsHandlerCodex : MonoBehaviour
         modelDropdown.ClearOptions();
         var options = new List<string>();
         int selectedIndex = 0;
-        string savedModel = SaveLoadHandler.Instance?.data?.codexModel ?? "";
+        string savedModel = AvatarConfigLoader.Instance?.GetActiveAvatarConfig()?.model ?? "";
 
         for (int i = 0; i < cachedModels.Count; i++)
         {
@@ -197,17 +198,15 @@ public class SettingsHandlerCodex : MonoBehaviour
     {
         if (index < 0 || index >= cachedModels.Count) return;
         var m = cachedModels[index];
-        SaveLoadHandler.Instance.data.codexModel = m.model;
+        AvatarConfigLoader.Instance?.UpdateActiveAvatarCodexField("model", m.model);
 
         // Auto-select provider if the model id encodes one (e.g., "minimax/codex-MiniMax-M2.1")
         if (!string.IsNullOrEmpty(m.id) && m.id.Contains("/"))
         {
             string inferredProvider = m.id.Substring(0, m.id.IndexOf('/'));
-            SaveLoadHandler.Instance.data.codexProvider = inferredProvider;
+            AvatarConfigLoader.Instance?.UpdateActiveAvatarCodexField("modelProvider", inferredProvider);
             SyncProviderDropdown(inferredProvider);
         }
-
-        Save();
     }
 
     // ── Providers ─────────────────────────────────────────────
@@ -221,7 +220,7 @@ public class SettingsHandlerCodex : MonoBehaviour
         providerDropdown.ClearOptions();
         var options = new List<string>();
         int selectedIndex = 0;
-        string savedProvider = SaveLoadHandler.Instance?.data?.codexProvider ?? "";
+        string savedProvider = AvatarConfigLoader.Instance?.GetActiveAvatarConfig()?.modelProvider ?? "";
 
         for (int i = 0; i < cachedProviders.Count; i++)
         {
@@ -240,16 +239,14 @@ public class SettingsHandlerCodex : MonoBehaviour
     void OnProviderChanged(int index)
     {
         if (index < 0 || index >= cachedProviders.Count) return;
-        SaveLoadHandler.Instance.data.codexProvider = cachedProviders[index].id;
-        Save();
+        AvatarConfigLoader.Instance?.UpdateActiveAvatarCodexField("modelProvider", cachedProviders[index].id);
     }
 
     // ── Animation Directives ───────────────────────────────────
 
     void OnAnimDirectivesChanged(bool value)
     {
-        SaveLoadHandler.Instance.data.enableAnimationDirectives = value;
-        Save();
+        AvatarConfigLoader.Instance?.UpdateActiveAvatarField("enableAnimationDirectives", value);
     }
 
     // ── New Conversation ───────────────────────────────────────
@@ -262,10 +259,11 @@ public class SettingsHandlerCodex : MonoBehaviour
         var bridge = CodexBridge.Instance;
         if (bridge != null && bridge.IsConnected && bridge.IsAuthenticated)
         {
-            string model = SaveLoadHandler.Instance.data.codexModel ?? "";
-            bool animDirectives = SaveLoadHandler.Instance.data.enableAnimationDirectives;
-            string systemPrompt = bridge.BuildSystemPrompt("", animDirectives);
-            bridge.StartThread(model, systemPrompt, (threadId) =>
+            var config = AvatarConfigLoader.Instance?.GetActiveAvatarConfig();
+            string model = config?.model ?? "";
+            string provider = config?.modelProvider ?? "";
+            string systemPrompt = bridge.BuildSystemPrompt(config?.baseInstructionsContent ?? "");
+            bridge.StartThread(model, provider, systemPrompt, null, (threadId) =>
             {
                 SaveLoadHandler.Instance.data.codexThreadId = threadId;
                 Save();
@@ -278,27 +276,22 @@ public class SettingsHandlerCodex : MonoBehaviour
 
     public void LoadSettings()
     {
-        var data = SaveLoadHandler.Instance?.data;
-        if (data == null) return;
-
-        enableAnimDirectivesToggle?.SetIsOnWithoutNotify(data.enableAnimationDirectives);
+        var config = AvatarConfigLoader.Instance?.GetActiveAvatarConfig();
+        enableAnimDirectivesToggle?.SetIsOnWithoutNotify(config?.enableAnimationDirectives ?? false);
     }
 
     public void ApplySettings()
     {
-        var data = SaveLoadHandler.Instance?.data;
-        if (data == null) return;
-
-        data.enableAnimationDirectives = enableAnimDirectivesToggle?.isOn ?? data.enableAnimationDirectives;
-        Save();
+        bool animDirectives = enableAnimDirectivesToggle?.isOn ?? false;
+        AvatarConfigLoader.Instance?.UpdateActiveAvatarField("enableAnimationDirectives", animDirectives);
     }
 
     public void ResetToDefaults()
     {
         enableAnimDirectivesToggle?.SetIsOnWithoutNotify(false);
-        SaveLoadHandler.Instance.data.enableAnimationDirectives = false;
-        SaveLoadHandler.Instance.data.codexModel = "";
-        SaveLoadHandler.Instance.data.codexProvider = "";
+        AvatarConfigLoader.Instance?.UpdateActiveAvatarField("enableAnimationDirectives", false);
+        AvatarConfigLoader.Instance?.UpdateActiveAvatarCodexField("model", "");
+        AvatarConfigLoader.Instance?.UpdateActiveAvatarCodexField("modelProvider", "");
         SaveLoadHandler.Instance.data.codexThreadId = "";
         Save();
         UpdateStatus();

@@ -66,49 +66,51 @@ public class UploadButtonHoldHandler : MonoBehaviour, IPointerDownHandler, IPoin
     {
         if (IsThumbnailMissing() || IsThumbnailTooBig())
         {
-            string[] paths = StandaloneFileBrowser.OpenFilePanel("Select PNG Thumbnail (Max 700KB)", "", new[] {
+            MEFileDialog.OpenFilePanelAsync("Select PNG Thumbnail (Max 700KB)", "", new[] {
                 new ExtensionFilter("Image", "png")
-            }, false);
-
-            if (paths.Length == 0 || !File.Exists(paths[0])) return;
-
-            FileInfo fi = new FileInfo(paths[0]);
-            if (fi.Length > 700 * 1024)
+            }, false, paths =>
             {
-                if (errorText != null)
+                if (!this || entry == null) return;
+                if (paths == null || paths.Length == 0 || string.IsNullOrEmpty(paths[0]) || !File.Exists(paths[0])) return;
+
+                FileInfo fi = new FileInfo(paths[0]);
+                if (fi.Length > 700 * 1024)
                 {
-                    SetErrorByKey("PNG_TOO_BIG", "PNG too big");
+                    if (errorText != null)
+                    {
+                        SetErrorByKey("PNG_TOO_BIG", "PNG too big");
+                    }
+                    return;
                 }
-                return;
-            }
 
-            string thumbnailsFolder = Path.Combine(Application.persistentDataPath, "Thumbnails");
-            if (!Directory.Exists(thumbnailsFolder))
-                Directory.CreateDirectory(thumbnailsFolder);
+                string thumbnailsFolder = Path.Combine(Application.persistentDataPath, "Thumbnails");
+                if (!Directory.Exists(thumbnailsFolder))
+                    Directory.CreateDirectory(thumbnailsFolder);
 
-            string safeName = Path.GetFileNameWithoutExtension(entry.filePath) + "_thumb.png";
-            string destinationPath = Path.Combine(thumbnailsFolder, safeName);
-            File.Copy(paths[0], destinationPath, true);
-            entry.thumbnailPath = destinationPath;
+                string safeName = Path.GetFileNameWithoutExtension(entry.filePath) + "_thumb.png";
+                string destinationPath = Path.Combine(thumbnailsFolder, safeName);
+                File.Copy(paths[0], destinationPath, true);
+                entry.thumbnailPath = destinationPath;
 
-            string avatarsJsonPath = Path.Combine(Application.persistentDataPath, "avatars.json");
-            if (File.Exists(avatarsJsonPath))
-            {
-                var json = File.ReadAllText(avatarsJsonPath);
-                var list = JsonConvert.DeserializeObject<List<AvatarLibraryMenu.AvatarEntry>>(json);
-                var match = list.FirstOrDefault(e => e.filePath == entry.filePath);
-                if (match != null)
+                string avatarsJsonPath = Path.Combine(Application.persistentDataPath, "avatars.json");
+                if (File.Exists(avatarsJsonPath))
                 {
-                    match.thumbnailPath = destinationPath;
-                    File.WriteAllText(avatarsJsonPath, JsonConvert.SerializeObject(list, Formatting.Indented));
+                    var json = File.ReadAllText(avatarsJsonPath);
+                    var list = JsonConvert.DeserializeObject<List<AvatarLibraryMenu.AvatarEntry>>(json);
+                    var match = list.FirstOrDefault(e => e.filePath == entry.filePath);
+                    if (match != null)
+                    {
+                        match.thumbnailPath = destinationPath;
+                        File.WriteAllText(avatarsJsonPath, JsonConvert.SerializeObject(list, Formatting.Indented));
+                    }
                 }
-            }
 
-            var menu = GameObject.FindFirstObjectByType<AvatarLibraryMenu>();
-            if (menu != null) menu.ReloadAvatars();
+                var menu = GameObject.FindFirstObjectByType<AvatarLibraryMenu>();
+                if (menu != null) menu.ReloadAvatars();
 
-            if (errorText != null) errorText.text = "";
-            UpdateButtonLabel();
+                if (errorText != null) errorText.text = "";
+                UpdateButtonLabel();
+            });
             return;
         }
 

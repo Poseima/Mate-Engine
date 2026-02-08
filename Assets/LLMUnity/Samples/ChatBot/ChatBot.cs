@@ -240,30 +240,30 @@ namespace LLMUnitySamples
 
         void StartCodexThread(CodexBridge bridge)
         {
-            var data = SaveLoadHandler.Instance?.data;
-            bool animDirectives = data?.enableAnimationDirectives ?? false;
-            string userPrompt = "";
+            var config = AvatarConfigLoader.Instance?.GetActiveAvatarConfig();
+            string userPrompt = config?.baseInstructionsContent ?? "";
             var promptBinder = FindFirstObjectByType<AISystemPromptBinder>();
-            if (promptBinder != null && promptBinder.input != null)
+            if (promptBinder != null && promptBinder.input != null && !string.IsNullOrEmpty(promptBinder.input.text))
                 userPrompt = promptBinder.input.text;
 
-            string systemPrompt = bridge.BuildSystemPrompt(userPrompt, animDirectives);
-            string savedThread = data?.codexThreadId;
-            string model = data?.codexModel ?? "";
+            string systemPrompt = bridge.BuildSystemPrompt(userPrompt);
+            string savedThread = SaveLoadHandler.Instance?.data?.codexThreadId;
+            string model = config?.model ?? "";
+            string provider = config?.modelProvider ?? "";
 
             if (!string.IsNullOrEmpty(savedThread))
             {
                 bridge.ResumeThread(savedThread, (ok) =>
                 {
                     if (!ok)
-                        bridge.StartThread(model, systemPrompt, OnThreadReady);
+                        bridge.StartThread(model, provider, systemPrompt, null, OnThreadReady);
                     else
                         OnThreadReady(savedThread);
                 });
             }
             else
             {
-                bridge.StartThread(model, systemPrompt, OnThreadReady);
+                bridge.StartThread(model, provider, systemPrompt, null, OnThreadReady);
             }
         }
 

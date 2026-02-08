@@ -40,7 +40,7 @@ public class SettingsHandlerBigScreen : MonoBehaviour
     public Button templateTimerRemove;
 
     private static readonly string[] TimeoutLabels = {
-        "30s", "1 min", "5 min", "15 min", "30 min", "45 min", "1 h", "1.5 h", "2 h", "2.5 h", "3 h"
+        "30s", "1 min", "5 min", "10 min", "15 min", "30 min", "45 min", "1 h", "1.5 h", "2 h", "2.5 h", "3 h"
     };
 
     private void Start()

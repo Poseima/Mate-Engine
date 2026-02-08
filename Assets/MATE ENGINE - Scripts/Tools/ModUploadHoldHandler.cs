@@ -70,13 +70,16 @@ public class ModUploadHoldHandler : MonoBehaviour, IPointerDownHandler, IPointer
 
         if (IsThumbnailMissingOrTooBig())
         {
-            if (PickThumbnail(out string savedPath))
+            PickThumbnailAsync(savedPath =>
             {
+                if (!this || modBtn == null) return;
+                if (string.IsNullOrEmpty(savedPath)) return;
+
                 modBtn.thumbnailPath = savedPath;
                 TryLoadPreviewFromPath(savedPath);
                 ClearError();
                 UpdateLabel();
-            }
+            });
             return;
         }
 
@@ -176,44 +179,47 @@ public class ModUploadHoldHandler : MonoBehaviour, IPointerDownHandler, IPointer
         return !(ext == ".png" || ext == ".jpg" || ext == ".jpeg");
     }
 
-    bool PickThumbnail(out string savedPath)
+    void PickThumbnailAsync(System.Action<string> cb)
     {
-        savedPath = null;
-
-        var paths = StandaloneFileBrowser.OpenFilePanel(
+        MEFileDialog.OpenFilePanelAsync(
             "Select Thumbnail (PNG/JPG, Max 2MB)",
             "",
             new[] { new ExtensionFilter("Image", "png", "jpg", "jpeg") },
-            false
-        );
-        if (paths == null || paths.Length == 0) return false;
+            false,
+            paths =>
+            {
+                if (!this) return;
+                if (paths == null || paths.Length == 0 || string.IsNullOrEmpty(paths[0])) { cb?.Invoke(null); return; }
 
-        string src = paths[0];
-        if (!File.Exists(src)) return false;
+                string src = paths[0];
+                if (!File.Exists(src)) { cb?.Invoke(null); return; }
 
-        var fi = new FileInfo(src);
-        if (fi.Length > MaxBytes) { SetError("Image too big (>2MB)"); return false; }
+                var fi = new FileInfo(src);
+                if (fi.Length > MaxBytes) { SetError("Image too big (>2MB)"); cb?.Invoke(null); return; }
 
-        string ext = Path.GetExtension(src).ToLowerInvariant();
-        if (ext != ".png" && ext != ".jpg" && ext != ".jpeg") { SetError("Unsupported format"); return false; }
+                string ext = Path.GetExtension(src).ToLowerInvariant();
+                if (ext != ".png" && ext != ".jpg" && ext != ".jpeg") { SetError("Unsupported format"); cb?.Invoke(null); return; }
 
-        string thumbs = Path.Combine(Application.persistentDataPath, "Thumbnails");
-        Directory.CreateDirectory(thumbs);
+                if (modBtn == null || string.IsNullOrEmpty(modBtn.filePath)) { cb?.Invoke(null); return; }
 
-        string baseName = Path.GetFileNameWithoutExtension(modBtn.filePath);
-        string dest = Path.Combine(thumbs, baseName + "_thumb.png");
-        try
-        {
-            File.Copy(src, dest, true);
-        }
-        catch
-        {
-            SetError("Copy failed");
-            return false;
-        }
+                string thumbs = Path.Combine(Application.persistentDataPath, "Thumbnails");
+                Directory.CreateDirectory(thumbs);
 
-        savedPath = dest;
-        return true;
+                string baseName = Path.GetFileNameWithoutExtension(modBtn.filePath);
+                string dest = Path.Combine(thumbs, baseName + "_thumb.png");
+                try
+                {
+                    File.Copy(src, dest, true);
+                }
+                catch
+                {
+                    SetError("Copy failed");
+                    cb?.Invoke(null);
+                    return;
+                }
+
+                cb?.Invoke(dest);
+            });
     }
 
     void TryLoadPreviewFromPath(string path)

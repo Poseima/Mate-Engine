@@ -61,6 +61,7 @@ namespace MateEngine.Codex
     public class InitializeParams
     {
         public ClientInfo clientInfo;
+        public ClientCapabilities capabilities;
     }
 
     [Serializable]
@@ -69,6 +70,12 @@ namespace MateEngine.Codex
         public string name;
         public string title;
         public string version;
+    }
+
+    [Serializable]
+    public class ClientCapabilities
+    {
+        public bool experimentalApi;
     }
 
     // ── Auth params ────────────────────────────────────────────────
@@ -152,6 +159,15 @@ namespace MateEngine.Codex
         public string developer_instructions;
     }
 
+    /// <summary>
+    /// Sandbox policy sent to Codex in turn/start params.
+    /// Valid type values (camelCase, matching Codex protocol):
+    ///   "workspaceWrite"    - Write access to workspace roots only (default)
+    ///   "dangerFullAccess"  - No sandbox (required for browser automation / Playwright)
+    ///   "readOnly"          - Read-only file access
+    ///   "externalSandbox"   - Sandbox managed externally
+    /// For "dangerFullAccess" and "readOnly", the other fields are ignored by Codex.
+    /// </summary>
     [Serializable]
     public class SandboxPolicyParam
     {

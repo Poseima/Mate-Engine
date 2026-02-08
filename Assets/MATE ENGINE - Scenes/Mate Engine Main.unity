@@ -1899,7 +1899,7 @@ MonoBehaviour:
   bubbleSprite: {fileID: 21300000, guid: 7f5b8d8ec16099b49a0d8a41bf746138, type: 3}
   bubbleColor: {r: 1, g: 1, b: 1, a: 1}
   fontColor: {r: 0.84313726, g: 0.85882354, b: 1, a: 1}
-  font: {fileID: 11400000, guid: 85fe0f8577a85a94295a31bca3c75c89, type: 2}
+  font: {fileID: 0}
   fontSize: 16
   bubbleWidth: 400
   textPadding: 10
@@ -8033,7 +8033,7 @@ MonoBehaviour:
   bubbleSprite: {fileID: 21300000, guid: 7f5b8d8ec16099b49a0d8a41bf746138, type: 3}
   bubbleColor: {r: 1, g: 1, b: 1, a: 1}
   fontColor: {r: 0.84313726, g: 0.85882354, b: 1, a: 1}
-  font: {fileID: 11400000, guid: 85fe0f8577a85a94295a31bca3c75c89, type: 2}
+  font: {fileID: 0}
   fontSize: 16
   bubbleWidth: 400
   textPadding: 10
@@ -9032,7 +9032,7 @@ MonoBehaviour:
   bubbleSprite: {fileID: 21300000, guid: 7f5b8d8ec16099b49a0d8a41bf746138, type: 3}
   bubbleColor: {r: 1, g: 1, b: 1, a: 1}
   fontColor: {r: 0.84313726, g: 0.85882354, b: 1, a: 1}
-  font: {fileID: 11400000, guid: 85fe0f8577a85a94295a31bca3c75c89, type: 2}
+  font: {fileID: 0}
   fontSize: 16
   bubbleWidth: 400
   textPadding: 10
@@ -35253,7 +35253,7 @@ Light:
   serializedVersion: 11
   m_Type: 2
   m_Color: {r: 1, g: 0.26999998, b: 0.96203995, a: 1}
-  m_Intensity: 1.0699317e-29
+  m_Intensity: 3.5286317e-30
   m_Range: 0.5
   m_SpotAngle: 30
   m_InnerSpotAngle: 21.80208
@@ -71763,7 +71763,7 @@ MonoBehaviour:
   bubbleSprite: {fileID: 21300000, guid: 7f5b8d8ec16099b49a0d8a41bf746138, type: 3}
   bubbleColor: {r: 1, g: 1, b: 1, a: 1}
   fontColor: {r: 0.84313726, g: 0.85882354, b: 1, a: 1}
-  font: {fileID: 11400000, guid: 85fe0f8577a85a94295a31bca3c75c89, type: 2}
+  font: {fileID: 0}
   fontSize: 16
   bubbleWidth: 400
   textPadding: 10
@@ -72130,7 +72130,7 @@ MonoBehaviour:
   bubbleSprite: {fileID: 21300000, guid: 7f5b8d8ec16099b49a0d8a41bf746138, type: 3}
   bubbleColor: {r: 1, g: 1, b: 1, a: 1}
   fontColor: {r: 0.84313726, g: 0.85882354, b: 1, a: 1}
-  font: {fileID: 11400000, guid: 85fe0f8577a85a94295a31bca3c75c89, type: 2}
+  font: {fileID: 0}
   fontSize: 16
   bubbleWidth: 400
   textPadding: 10
@@ -78183,7 +78183,7 @@ MonoBehaviour:
   bubbleSprite: {fileID: 21300000, guid: 7f5b8d8ec16099b49a0d8a41bf746138, type: 3}
   bubbleColor: {r: 1, g: 1, b: 1, a: 1}
   fontColor: {r: 0.84313726, g: 0.85882354, b: 1, a: 1}
-  font: {fileID: 11400000, guid: 85fe0f8577a85a94295a31bca3c75c89, type: 2}
+  font: {fileID: 0}
   fontSize: 16
   bubbleWidth: 400
   textPadding: 10
@@ -78475,7 +78475,7 @@ Light:
   serializedVersion: 11
   m_Type: 2
   m_Color: {r: 0, g: 0.44799995, b: 1, a: 1}
-  m_Intensity: 2.1398634e-29
+  m_Intensity: 7.057263e-30
   m_Range: 1
   m_SpotAngle: 30
   m_InnerSpotAngle: 21.80208
@@ -85428,7 +85428,7 @@ MonoBehaviour:
   bubbleSprite: {fileID: 21300000, guid: 7f5b8d8ec16099b49a0d8a41bf746138, type: 3}
   bubbleColor: {r: 1, g: 1, b: 1, a: 1}
   fontColor: {r: 0.84313726, g: 0.85882354, b: 1, a: 1}
-  font: {fileID: 11400000, guid: 85fe0f8577a85a94295a31bca3c75c89, type: 2}
+  font: {fileID: 0}
   fontSize: 16
   bubbleWidth: 400
   textPadding: 10
@@ -95479,7 +95479,7 @@ MonoBehaviour:
   bubbleSprite: {fileID: 21300000, guid: 7f5b8d8ec16099b49a0d8a41bf746138, type: 3}
   bubbleColor: {r: 1, g: 1, b: 1, a: 1}
   fontColor: {r: 0.84313726, g: 0.85882354, b: 1, a: 1}
-  font: {fileID: 11400000, guid: 85fe0f8577a85a94295a31bca3c75c89, type: 2}
+  font: {fileID: 0}
   fontSize: 16
   bubbleWidth: 400
   textPadding: 10
@@ -103408,7 +103408,7 @@ Light:
   serializedVersion: 11
   m_Type: 2
   m_Color: {r: 0, g: 0.44799995, b: 1, a: 1}
-  m_Intensity: 1.6048976e-29
+  m_Intensity: 5.2929475e-30
   m_Range: 1
   m_SpotAngle: 30
   m_InnerSpotAngle: 21.80208
@@ -107484,7 +107484,7 @@ MonoBehaviour:
   bubbleSprite: {fileID: 21300000, guid: 7f5b8d8ec16099b49a0d8a41bf746138, type: 3}
   bubbleColor: {r: 1, g: 1, b: 1, a: 1}
   fontColor: {r: 0.84313726, g: 0.85882354, b: 1, a: 1}
-  font: {fileID: 11400000, guid: 85fe0f8577a85a94295a31bca3c75c89, type: 2}
+  font: {fileID: 0}
   fontSize: 16
   bubbleWidth: 400
   textPadding: 10
@@ -124253,7 +124253,7 @@ MonoBehaviour:
   bubbleSprite: {fileID: 21300000, guid: 7f5b8d8ec16099b49a0d8a41bf746138, type: 3}
   bubbleColor: {r: 1, g: 1, b: 1, a: 1}
   fontColor: {r: 0.84313726, g: 0.85882354, b: 1, a: 1}
-  font: {fileID: 11400000, guid: 85fe0f8577a85a94295a31bca3c75c89, type: 2}
+  font: {fileID: 0}
   fontSize: 16
   bubbleWidth: 400
   textPadding: 10
@@ -132520,7 +132520,7 @@ MonoBehaviour:
   bubbleSprite: {fileID: 21300000, guid: 7f5b8d8ec16099b49a0d8a41bf746138, type: 3}
   bubbleColor: {r: 1, g: 1, b: 1, a: 1}
   fontColor: {r: 0.84313726, g: 0.85882354, b: 1, a: 1}
-  font: {fileID: 11400000, guid: 85fe0f8577a85a94295a31bca3c75c89, type: 2}
+  font: {fileID: 0}
   fontSize: 16
   bubbleWidth: 400
   textPadding: 10
@@ -139260,7 +139260,7 @@ MonoBehaviour:
   bubbleSprite: {fileID: 21300000, guid: 7f5b8d8ec16099b49a0d8a41bf746138, type: 3}
   bubbleColor: {r: 1, g: 1, b: 1, a: 1}
   fontColor: {r: 0.84313726, g: 0.85882354, b: 1, a: 1}
-  font: {fileID: 11400000, guid: 85fe0f8577a85a94295a31bca3c75c89, type: 2}
+  font: {fileID: 0}
   fontSize: 16
   bubbleWidth: 400
   textPadding: 10
@@ -169097,7 +169097,7 @@ MonoBehaviour:
   playerColor: {r: 1, g: 1, b: 1, a: 1}
   aiColor: {r: 1, g: 1, b: 1, a: 1}
   fontColor: {r: 1, g: 1, b: 1, a: 1}
-  font: {fileID: 11400000, guid: 85fe0f8577a85a94295a31bca3c75c89, type: 2}
+  font: {fileID: 0}
   fontSize: 20
   bubbleWidth: 500
   textPadding: 24
@@ -194142,6 +194142,7 @@ GameObject:
   - component: {fileID: 8924917334924735515}
   - component: {fileID: 8924917334924735516}
   - component: {fileID: 8924917334924735518}
+  - component: {fileID: 8924917334924735519}
   m_Layer: 10
   m_Name: VRMModel
   m_TagString: Untagged
@@ -214426,7 +214427,7 @@ MonoBehaviour:
   bubbleSprite: {fileID: 21300000, guid: 7f5b8d8ec16099b49a0d8a41bf746138, type: 3}
   bubbleColor: {r: 1, g: 1, b: 1, a: 1}
   fontColor: {r: 0.84313726, g: 0.85882354, b: 1, a: 1}
-  font: {fileID: 11400000, guid: 85fe0f8577a85a94295a31bca3c75c89, type: 2}
+  font: {fileID: 0}
   fontSize: 16
   bubbleWidth: 400
   textPadding: 10
@@ -226963,7 +226964,7 @@ MonoBehaviour:
   bubbleSprite: {fileID: 21300000, guid: 7f5b8d8ec16099b49a0d8a41bf746138, type: 3}
   bubbleColor: {r: 1, g: 1, b: 1, a: 1}
   fontColor: {r: 1, g: 1, b: 1, a: 1}
-  font: {fileID: 11400000, guid: 85fe0f8577a85a94295a31bca3c75c89, type: 2}
+  font: {fileID: 0}
   fontSize: 26
   bubbleWidth: 600
   textPadding: 30
@@ -259925,7 +259926,7 @@ MonoBehaviour:
   bubbleSprite: {fileID: 21300000, guid: 7f5b8d8ec16099b49a0d8a41bf746138, type: 3}
   bubbleColor: {r: 1, g: 1, b: 1, a: 1}
   fontColor: {r: 0.84313726, g: 0.85882354, b: 1, a: 1}
-  font: {fileID: 11400000, guid: 85fe0f8577a85a94295a31bca3c75c89, type: 2}
+  font: {fileID: 0}
   fontSize: 16
   bubbleWidth: 400
   textPadding: 10
@@ -264849,7 +264850,7 @@ MonoBehaviour:
   bubbleSprite: {fileID: 21300000, guid: 7f5b8d8ec16099b49a0d8a41bf746138, type: 3}
   bubbleColor: {r: 1, g: 1, b: 1, a: 1}
   fontColor: {r: 0.84313726, g: 0.85882354, b: 1, a: 1}
-  font: {fileID: 11400000, guid: 85fe0f8577a85a94295a31bca3c75c89, type: 2}
+  font: {fileID: 0}
   fontSize: 16
   bubbleWidth: 400
   textPadding: 10
@@ -265480,7 +265481,7 @@ MonoBehaviour:
     groupID: ambi_lights
     exclusiveTags:
     - lights
-    fadeCurrentValue: 5.3496586e-30
+    fadeCurrentValue: 1.7643158e-30
     fadeTarget: 0
     isFading: 1
     hasYSet: 0
@@ -265504,7 +265505,7 @@ MonoBehaviour:
     groupID: ambi_lights
     exclusiveTags:
     - lights
-    fadeCurrentValue: 5.3496586e-30
+    fadeCurrentValue: 1.7643158e-30
     fadeTarget: 0
     isFading: 1
     hasYSet: 0
@@ -265528,7 +265529,7 @@ MonoBehaviour:
     groupID: ambi_lights
     exclusiveTags:
     - lights
-    fadeCurrentValue: 5.3496586e-30
+    fadeCurrentValue: 1.7643158e-30
     fadeTarget: 0
     isFading: 1
     hasYSet: 0
@@ -268868,7 +268869,7 @@ MonoBehaviour:
   bubbleSprite: {fileID: 21300000, guid: 7f5b8d8ec16099b49a0d8a41bf746138, type: 3}
   bubbleColor: {r: 1, g: 1, b: 1, a: 1}
   fontColor: {r: 0.84313726, g: 0.85882354, b: 1, a: 1}
-  font: {fileID: 11400000, guid: 85fe0f8577a85a94295a31bca3c75c89, type: 2}
+  font: {fileID: 0}
   fontSize: 16
   bubbleWidth: 400
   textPadding: 10
@@ -271223,7 +271224,7 @@ MonoBehaviour:
   bubbleSprite: {fileID: 21300000, guid: 7f5b8d8ec16099b49a0d8a41bf746138, type: 3}
   bubbleColor: {r: 1, g: 1, b: 1, a: 1}
   fontColor: {r: 0.84313726, g: 0.85882354, b: 1, a: 1}
-  font: {fileID: 11400000, guid: 85fe0f8577a85a94295a31bca3c75c89, type: 2}
+  font: {fileID: 0}
   fontSize: 16
   bubbleWidth: 400
   textPadding: 10
@@ -273086,7 +273087,7 @@ MonoBehaviour:
   bubbleSprite: {fileID: 21300000, guid: 7f5b8d8ec16099b49a0d8a41bf746138, type: 3}
   bubbleColor: {r: 1, g: 1, b: 1, a: 1}
   fontColor: {r: 0.84313726, g: 0.85882354, b: 1, a: 1}
-  font: {fileID: 11400000, guid: 85fe0f8577a85a94295a31bca3c75c89, type: 2}
+  font: {fileID: 0}
   fontSize: 16
   bubbleWidth: 400
   textPadding: 10
@@ -279986,7 +279987,7 @@ MonoBehaviour:
   bubbleSprite: {fileID: 21300000, guid: 7f5b8d8ec16099b49a0d8a41bf746138, type: 3}
   bubbleColor: {r: 1, g: 1, b: 1, a: 1}
   fontColor: {r: 1, g: 1, b: 1, a: 1}
-  font: {fileID: 11400000, guid: 85fe0f8577a85a94295a31bca3c75c89, type: 2}
+  font: {fileID: 0}
   fontSize: 26
   bubbleWidth: 600
   textPadding: 30
@@ -280291,7 +280292,7 @@ MonoBehaviour:
   bubbleSprite: {fileID: 21300000, guid: e0d7334234783b64a84a76567ea3d639, type: 3}
   bubbleColor: {r: 1, g: 1, b: 1, a: 1}
   fontColor: {r: 1, g: 1, b: 1, a: 1}
-  font: {fileID: 11400000, guid: 85fe0f8577a85a94295a31bca3c75c89, type: 2}
+  font: {fileID: 0}
   fontSize: 26
   bubbleWidth: 600
   textPadding: 30
@@ -288468,7 +288469,7 @@ MonoBehaviour:
   bubbleSprite: {fileID: 21300000, guid: 7f5b8d8ec16099b49a0d8a41bf746138, type: 3}
   bubbleColor: {r: 1, g: 1, b: 1, a: 1}
   fontColor: {r: 0.84313726, g: 0.85882354, b: 1, a: 1}
-  font: {fileID: 11400000, guid: 85fe0f8577a85a94295a31bca3c75c89, type: 2}
+  font: {fileID: 0}
   fontSize: 16
   bubbleWidth: 400
   textPadding: 10
@@ -293941,7 +293942,7 @@ MonoBehaviour:
     disableInBigScreen: 0
   - componentTypeName: AvatarMinecraftMessages
     disableInBigScreen: 0
-  - componentTypeName: AvatarFoodController
+  - componentTypeName: WhatsAppIPCBridge
     disableInBigScreen: 0
 --- !u!114 &8924917334924735512
 MonoBehaviour:
@@ -293990,7 +293991,7 @@ MonoBehaviour:
   bubbleSprite: {fileID: 21300000, guid: 7f5b8d8ec16099b49a0d8a41bf746138, type: 3}
   bubbleColor: {r: 1, g: 1, b: 1, a: 1}
   fontColor: {r: 1, g: 1, b: 1, a: 1}
-  font: {fileID: 11400000, guid: 85fe0f8577a85a94295a31bca3c75c89, type: 2}
+  font: {fileID: 0}
   fontSize: 26
   bubbleWidth: 600
   textPadding: 30
@@ -294177,7 +294178,7 @@ MonoBehaviour:
   bubbleSprite: {fileID: 21300000, guid: 7f5b8d8ec16099b49a0d8a41bf746138, type: 3}
   bubbleColor: {r: 1, g: 1, b: 1, a: 1}
   fontColor: {r: 1, g: 1, b: 1, a: 1}
-  font: {fileID: 11400000, guid: 85fe0f8577a85a94295a31bca3c75c89, type: 2}
+  font: {fileID: 0}
   fontSize: 26
   bubbleWidth: 600
   textPadding: 30
@@ -294465,7 +294466,7 @@ MonoBehaviour:
   bubbleSprite: {fileID: 21300000, guid: e0d7334234783b64a84a76567ea3d639, type: 3}
   bubbleColor: {r: 1, g: 1, b: 1, a: 1}
   fontColor: {r: 1, g: 1, b: 1, a: 1}
-  font: {fileID: 11400000, guid: 85fe0f8577a85a94295a31bca3c75c89, type: 2}
+  font: {fileID: 0}
   fontSize: 26
   bubbleWidth: 600
   textPadding: 30
@@ -294482,6 +294483,21 @@ MonoBehaviour:
   - {fileID: 4562921240047602740}
   useBlockObjects: 1
   streamAudioSource: {fileID: 1791599659}
+--- !u!114 &8924917334924735519
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2411184301990817844}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: aee38d5e23f6d4651bbdbbca8271ae3b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::WhatsAppIPCBridge
+  enableWhatsAppBridge: 1
+  pollIntervalMs: 500
+  debugLog: 1
 --- !u!4 &8932384755772289895
 Transform:
   m_ObjectHideFlags: 0
