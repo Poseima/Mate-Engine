@@ -1,4 +1,5 @@
 ﻿using UnityEngine;
+using UnityEngine.EventSystems;
 using System.Collections.Generic;
 using System.Collections;
 
@@ -76,6 +77,11 @@ public class AvatarAnimatorController : MonoBehaviour
         {
             if (isDragging) SetDragging(false);
             if (isDancing) SetDancing(false);
+            return;
+        }
+        if (EventSystem.current != null && EventSystem.current.IsPointerOverGameObject())
+        {
+            if (isDragging) SetDragging(false);
             return;
         }
         if (Input.GetMouseButtonDown(0))

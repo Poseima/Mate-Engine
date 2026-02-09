@@ -31,16 +31,33 @@ namespace MateEngine.Codex
         public event Action<bool, string> OnLoginCompleted; // account/login/completed
         public event Action<string> OnError;                // any error
 
+        // Task monitor events (invoked on main thread via Pump)
+        public event Action<string, string> OnTurnStartedFull;              // threadId, turnId
+        public event Action<string, string> OnTurnCompletedFull;            // threadId, turnId
+        public event Action<string, string, JToken> OnItemStarted;          // threadId, turnId, item
+        public event Action<string, string, JToken> OnItemCompleted;        // threadId, turnId, item
+        public event Action<string, string, string, JArray> OnPlanUpdated;  // threadId, turnId, explanation, plan
+        public event Action<string, string> OnThreadNameUpdated;            // threadId, name
+
         public bool IsRunning => running && process != null && !process.HasExited;
 
         // Current turn ID (tracked for interrupt)
         public string CurrentTurnId { get; private set; }
+
+        // The server doesn't always emit `turn/started` (observed in Player logs).
+        // Synthesize a "turn started" event when we first see any notification that includes (threadId, turnId).
+        readonly object startedTurnsLock = new();
+        readonly HashSet<string> startedTurns = new();
 
         // ── Lifecycle ──────────────────────────────────────────────
 
         public void Start(string binaryPath, Dictionary<string, string> envVars)
         {
             if (running) Stop();
+
+            // New process/session: forget any prior synthetic turn starts.
+            CurrentTurnId = null;
+            lock (startedTurnsLock) startedTurns.Clear();
 
             var psi = new ProcessStartInfo
             {
@@ -100,6 +117,9 @@ namespace MateEngine.Codex
             process?.Dispose();
             process = null;
             pendingRequests.Clear();
+
+            CurrentTurnId = null;
+            lock (startedTurnsLock) startedTurns.Clear();
         }
 
         // ── Send request (expects response) ────────────────────────
@@ -233,28 +253,36 @@ namespace MateEngine.Codex
                 // ── V2 protocol format ──────────────────────────────────
                 case "item/agentMessage/delta":
                     Debug.Log("[Codex RAW delta] " + @params?.ToString(Formatting.None));
+                    var deltaThreadId = @params?["threadId"]?.Value<string>() ?? @params?["thread_id"]?.Value<string>() ?? "";
+                    var deltaTurnId = @params?["turnId"]?.Value<string>() ?? @params?["turn_id"]?.Value<string>() ?? "";
+                    EnsureTurnStarted(deltaThreadId, deltaTurnId);
+
                     var delta = @params?["delta"]?.Value<string>() ?? "";
                     Enqueue(() => OnStreamDelta?.Invoke(delta));
                     break;
 
                 case "turn/completed":
                     Debug.Log("[Codex RAW turn/completed] " + @params?.ToString(Formatting.None));
-                    var tid = @params?["threadId"]?.Value<string>() ?? "";
+                    var tid = @params?["threadId"]?.Value<string>() ?? @params?["thread_id"]?.Value<string>() ?? "";
+                    var completedTurnId = @params?["turn"]?["id"]?.Value<string>()
+                        ?? @params?["turnId"]?.Value<string>()
+                        ?? @params?["turn_id"]?.Value<string>()
+                        ?? "";
                     Enqueue(() =>
                     {
+                        var resolvedTurnId = !string.IsNullOrEmpty(completedTurnId) ? completedTurnId : CurrentTurnId;
                         CurrentTurnId = null;
                         OnTurnCompleted?.Invoke(tid);
+                        if (!string.IsNullOrEmpty(resolvedTurnId))
+                            OnTurnCompletedFull?.Invoke(tid, resolvedTurnId);
                     });
                     break;
 
                 case "turn/started":
-                    var turn = @params?["turn"];
-                    var turnId = turn?["id"]?.Value<string>() ?? "";
-                    Enqueue(() =>
-                    {
-                        CurrentTurnId = turnId;
-                        OnTurnStarted?.Invoke(turnId);
-                    });
+                    var startedTurn = @params?["turn"];
+                    var startedTurnId = startedTurn?["id"]?.Value<string>() ?? "";
+                    var startedThreadId = @params?["threadId"]?.Value<string>() ?? @params?["thread_id"]?.Value<string>() ?? "";
+                    EnsureTurnStarted(startedThreadId, startedTurnId);
                     break;
 
                 case "account/login/completed":
@@ -279,8 +307,10 @@ namespace MateEngine.Codex
                     {
                         if (CurrentTurnId != null)
                         {
+                            var completed = CurrentTurnId;
                             CurrentTurnId = null;
                             OnTurnCompleted?.Invoke(rawCompTid);
+                            OnTurnCompletedFull?.Invoke(rawCompTid, completed);
                         }
                     });
                     break;
@@ -292,12 +322,57 @@ namespace MateEngine.Codex
                     Enqueue(() => OnError?.Invoke(rawErr));
                     break;
 
+                case "item/started":
+                {
+                    var isThreadId = @params?["threadId"]?.Value<string>() ?? @params?["thread_id"]?.Value<string>() ?? "";
+                    var isTurnId = @params?["turn"]?["id"]?.Value<string>()
+                        ?? @params?["turnId"]?.Value<string>()
+                        ?? @params?["turn_id"]?.Value<string>()
+                        ?? "";
+                    var isItem = @params?["item"];
+                    EnsureTurnStarted(isThreadId, isTurnId);
+                    Enqueue(() => OnItemStarted?.Invoke(isThreadId, isTurnId, isItem));
+                    break;
+                }
+
+                case "item/completed":
+                {
+                    var icThreadId = @params?["threadId"]?.Value<string>() ?? @params?["thread_id"]?.Value<string>() ?? "";
+                    var icTurnId = @params?["turn"]?["id"]?.Value<string>()
+                        ?? @params?["turnId"]?.Value<string>()
+                        ?? @params?["turn_id"]?.Value<string>()
+                        ?? "";
+                    var icItem = @params?["item"];
+                    EnsureTurnStarted(icThreadId, icTurnId);
+                    Enqueue(() => OnItemCompleted?.Invoke(icThreadId, icTurnId, icItem));
+                    break;
+                }
+
+                case "thread/name/updated":
+                {
+                    var tnThreadId = @params?["threadId"]?.Value<string>() ?? "";
+                    var tnName = @params?["threadName"]?.Value<string>() ?? @params?["name"]?.Value<string>() ?? "";
+                    Enqueue(() => OnThreadNameUpdated?.Invoke(tnThreadId, tnName));
+                    break;
+                }
+
+                case "turn/plan/updated":
+                {
+                    var tpThreadId = @params?["threadId"]?.Value<string>() ?? @params?["thread_id"]?.Value<string>() ?? "";
+                    var tpTurnId = @params?["turn"]?["id"]?.Value<string>()
+                        ?? @params?["turnId"]?.Value<string>()
+                        ?? @params?["turn_id"]?.Value<string>()
+                        ?? "";
+                    var tpExplanation = @params?["explanation"]?.Value<string>() ?? "";
+                    var tpPlan = @params?["plan"] as JArray ?? new JArray();
+                    EnsureTurnStarted(tpThreadId, tpTurnId);
+                    Enqueue(() => OnPlanUpdated?.Invoke(tpThreadId, tpTurnId, tpExplanation, tpPlan));
+                    break;
+                }
+
                 // ── Informational — silently ignore ─────────────────────
                 case "thread/started":
-                case "thread/name/updated":
                 case "thread/tokenUsage/updated":
-                case "item/started":
-                case "item/completed":
                 case "account/updated":
                 case "account/rateLimits/updated":
                 case "turn/diff/updated":
@@ -323,6 +398,27 @@ namespace MateEngine.Codex
                     Enqueue(() => Debug.Log("[Codex] Notification: " + method));
                     break;
             }
+        }
+
+        void EnsureTurnStarted(string threadId, string turnId)
+        {
+            if (string.IsNullOrEmpty(threadId) || string.IsNullOrEmpty(turnId))
+                return;
+
+            string key = threadId + ":" + turnId;
+            lock (startedTurnsLock)
+            {
+                if (startedTurns.Contains(key))
+                    return;
+                startedTurns.Add(key);
+            }
+
+            Enqueue(() =>
+            {
+                CurrentTurnId = turnId;
+                OnTurnStarted?.Invoke(turnId);
+                OnTurnStartedFull?.Invoke(threadId, turnId);
+            });
         }
 
         void Enqueue(Action a) => mainThreadQueue.Enqueue(a);

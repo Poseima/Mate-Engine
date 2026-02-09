@@ -271,6 +271,15 @@ public class WhatsAppIPCBridge : MonoBehaviour
             processingMessage = false;
         };
 
+        // Register source metadata for task monitor
+        bridge.TaskTracker.RegisterSourceMetadata(bridge.CurrentThreadId, new MateEngine.Codex.TaskSourceMetadata
+        {
+            SourceType = "whatsapp",
+            SourceGroup = groupFolder,
+            SourceSender = request.senderName,
+            InputPreview = request.text
+        });
+
         // Pass avatar config values to override app settings
         bridge.SendMessage(inputText, onStream, onComplete,
             avatarConfig.model, avatarConfig.modelProvider, avatarConfig.workingDirectory,

@@ -44,6 +44,8 @@ public class AvatarBigScreenScreenSaver : MonoBehaviour
 
     void Update()
     {
+        return; // Screensaver disabled — triggers too frequently due to Input.anyKey not working when Unity is unfocused
+
         LoadSettings();
 
         if (MenuActions.IsAnyMenuOpen())

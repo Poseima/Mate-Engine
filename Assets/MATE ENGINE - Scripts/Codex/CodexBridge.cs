@@ -23,11 +23,14 @@ namespace MateEngine.Codex
         public List<ProviderInfo> AvailableProviders { get; private set; } = new();
 
         readonly CodexProtocolHandler protocol = new();
+        public readonly CodexTaskTracker TaskTracker = new();
 
         // Current turn state
         Action<string> currentStreamCb;
         Action currentCompleteCb;
         string streamBuffer = "";
+        string rawStreamBuffer = "";
+        string thinkBuffer = "";
 
         // ── Events ─────────────────────────────────────────────────
 
@@ -48,6 +51,10 @@ namespace MateEngine.Codex
 
         void Start()
         {
+            // Auto-attach task monitor UI if not present
+            if (GetComponent<TaskMonitorUI>() == null)
+                gameObject.AddComponent<TaskMonitorUI>();
+
             if (!IsConnected)
                 Initialize();
         }
@@ -110,11 +117,29 @@ namespace MateEngine.Codex
             else
                 env["PATH"] = skillBin + ":/usr/local/bin:/usr/bin:/bin";
 
-            // Wire protocol events
+            // Wire protocol events (unsubscribe first to prevent double-wiring on reconnect)
+            protocol.OnStreamDelta -= HandleDelta;
+            protocol.OnTurnCompleted -= HandleTurnCompleted;
+            protocol.OnLoginCompleted -= HandleLoginCompleted;
+            protocol.OnError -= HandleProtocolError;
             protocol.OnStreamDelta += HandleDelta;
             protocol.OnTurnCompleted += HandleTurnCompleted;
             protocol.OnLoginCompleted += HandleLoginCompleted;
-            protocol.OnError += (msg) => { Debug.LogError("[CodexBridge] " + msg); OnError?.Invoke(msg); };
+            protocol.OnError += HandleProtocolError;
+
+            // Wire task tracker events
+            protocol.OnTurnStartedFull -= TaskTracker.HandleTurnStarted;
+            protocol.OnTurnCompletedFull -= TaskTracker.HandleTurnCompleted;
+            protocol.OnItemStarted -= TaskTracker.HandleItemStarted;
+            protocol.OnItemCompleted -= TaskTracker.HandleItemCompleted;
+            protocol.OnPlanUpdated -= TaskTracker.HandlePlanUpdated;
+            protocol.OnThreadNameUpdated -= TaskTracker.HandleThreadNameUpdated;
+            protocol.OnTurnStartedFull += TaskTracker.HandleTurnStarted;
+            protocol.OnTurnCompletedFull += TaskTracker.HandleTurnCompleted;
+            protocol.OnItemStarted += TaskTracker.HandleItemStarted;
+            protocol.OnItemCompleted += TaskTracker.HandleItemCompleted;
+            protocol.OnPlanUpdated += TaskTracker.HandlePlanUpdated;
+            protocol.OnThreadNameUpdated += TaskTracker.HandleThreadNameUpdated;
 
             protocol.Start(binaryPath, env);
 
@@ -258,6 +283,8 @@ namespace MateEngine.Codex
                 }
             });
         }
+
+        void HandleProtocolError(string msg) { Debug.LogError("[CodexBridge] " + msg); OnError?.Invoke(msg); }
 
         void HandleLoginCompleted(bool success, string error)
         {
@@ -512,12 +539,60 @@ namespace MateEngine.Codex
 
             Debug.Log("[CodexBridge RAW delta] " + delta);
 
-            // Strip <think>…</think> blocks (some models wrap reasoning in these)
-            string clean = StripThinkTags(delta);
-            if (string.IsNullOrEmpty(clean)) return;
+            rawStreamBuffer += delta;
 
-            streamBuffer += clean;
+            // State-machine parse: split raw buffer into thinking vs response content.
+            // Handles incomplete <think> blocks during streaming (tag may span deltas).
+            ParseRawBuffer();
+
             currentStreamCb?.Invoke(streamBuffer);
+
+            // Forward to task tracker for activity log
+            if (!string.IsNullOrEmpty(protocol.CurrentTurnId))
+            {
+                if (thinkBuffer.Length > 0)
+                    TaskTracker.HandleThinkingDelta(protocol.CurrentTurnId, thinkBuffer);
+                if (streamBuffer.Length > 0)
+                    TaskTracker.HandleStreamDelta(protocol.CurrentTurnId, streamBuffer);
+            }
+        }
+
+        void ParseRawBuffer()
+        {
+            var sb = new System.Text.StringBuilder();
+            var tb = new System.Text.StringBuilder();
+            bool inThink = false;
+            int i = 0;
+            string raw = rawStreamBuffer;
+
+            while (i < raw.Length)
+            {
+                if (!inThink && i + 7 <= raw.Length && raw[i] == '<'
+                    && string.CompareOrdinal(raw, i, "<think>", 0, 7) == 0)
+                {
+                    inThink = true;
+                    i += 7;
+                    continue;
+                }
+                if (inThink && i + 8 <= raw.Length && raw[i] == '<'
+                    && string.CompareOrdinal(raw, i, "</think>", 0, 8) == 0)
+                {
+                    inThink = false;
+                    i += 8;
+                    // Skip trailing whitespace after </think>
+                    while (i < raw.Length && (raw[i] == '\n' || raw[i] == '\r' || raw[i] == ' '))
+                        i++;
+                    continue;
+                }
+                if (inThink)
+                    tb.Append(raw[i]);
+                else
+                    sb.Append(raw[i]);
+                i++;
+            }
+
+            streamBuffer = sb.ToString();
+            thinkBuffer = tb.ToString();
         }
 
         void HandleTurnCompleted(string threadId)
@@ -529,18 +604,18 @@ namespace MateEngine.Codex
             currentStreamCb = null;
             currentCompleteCb = null;
             streamBuffer = "";
-        }
-
-        static string StripThinkTags(string text)
-        {
-            if (text == null) return text;
-            // Remove <think>…</think> blocks including newlines around them
-            var result = System.Text.RegularExpressions.Regex.Replace(
-                text, @"<think>[\s\S]*?</think>\s*", "", System.Text.RegularExpressions.RegexOptions.None);
-            return result.TrimStart('\n', '\r');
+            rawStreamBuffer = "";
+            thinkBuffer = "";
         }
 
         // ── Interrupt ──────────────────────────────────────────────
+
+        public void CancelCurrentTurn()
+        {
+            if (!string.IsNullOrEmpty(protocol.CurrentTurnId))
+                TaskTracker.CancelTask(protocol.CurrentTurnId);
+            InterruptTurn();
+        }
 
         public void InterruptTurn()
         {
@@ -558,6 +633,8 @@ namespace MateEngine.Codex
             currentCompleteCb?.Invoke();
             currentCompleteCb = null;
             streamBuffer = "";
+            rawStreamBuffer = "";
+            thinkBuffer = "";
         }
 
         // ── System prompt helper ───────────────────────────────────
