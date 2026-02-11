@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
+using System.Text;
 using Newtonsoft.Json.Linq;
 using UnityEngine;
 
@@ -55,6 +57,7 @@ namespace MateEngine.Codex
         public readonly List<PlanStepInfo> PlanSteps = new();
         public readonly List<ActivityEntry> ActivityLog = new();
         public string PlanExplanation;
+        public string AccumulatedThinking;
         public string AccumulatedResponse;
         public float LastActivityEventTime;
     }
@@ -66,6 +69,9 @@ namespace MateEngine.Codex
         const int MaxActivityEntries = 50;
         const float StaleMetadataSeconds = 30f;
         const float ActivityThrottleSeconds = 0.2f;
+        const int PreviewChars = 240;
+        const int MaxAccumulatedThinkingChars = 4096;
+        const int MaxAccumulatedResponseChars = 4096;
 
         // Active + recently completed tasks keyed by turnId
         readonly Dictionary<string, TaskInfo> tasks = new();
@@ -158,12 +164,14 @@ namespace MateEngine.Codex
             // Add query activity entry from metadata
             if (meta != null && !string.IsNullOrEmpty(meta.InputPreview))
             {
+                string raw = meta.SourceSender != null
+                    ? meta.SourceSender + ": " + meta.InputPreview
+                    : meta.InputPreview;
+                string sanitized = Tail(SanitizeOneLine(raw), PreviewChars);
                 AddActivityEntry(task, new ActivityEntry
                 {
                     Type = "query",
-                    Label = meta.SourceSender != null
-                        ? meta.SourceSender + ": " + meta.InputPreview
-                        : meta.InputPreview,
+                    Label = sanitized,
                     Status = TaskItemStatus.Completed
                 });
             }
@@ -220,15 +228,52 @@ namespace MateEngine.Codex
                     task.Items.RemoveAt(0);
                 task.Items.Add(itemInfo);
 
-                // Add activity entry
-                string activityType = itemInfo.Type == "Thinking" ? "thinking" : "tool";
-                AddActivityEntry(task, new ActivityEntry
+                // Add / update activity entry.
+                // Special-case: user messages are already shown via metadata (query entry).
+                // Don't add noisy placeholder items to the activity log.
+                if (itemInfo.Type == "UserMessage")
                 {
-                    Type = activityType,
-                    Label = itemInfo.Label,
-                    Status = TaskItemStatus.Active,
-                    ItemId = itemInfo.Id
-                });
+                    if (!string.IsNullOrEmpty(itemInfo.Label))
+                    {
+                        bool hasQuery = false;
+                        for (int i = task.ActivityLog.Count - 1; i >= 0; i--)
+                        {
+                            if (task.ActivityLog[i].Type == "query")
+                            {
+                                hasQuery = true;
+                                break;
+                            }
+                        }
+
+                        if (!hasQuery)
+                        {
+                            AddActivityEntry(task, new ActivityEntry
+                            {
+                                Type = "query",
+                                Label = itemInfo.Label,
+                                Status = TaskItemStatus.Completed,
+                                ItemId = itemInfo.Id
+                            });
+                        }
+                    }
+                }
+                // Special-case: agent message items frequently start multiple times; avoid spamming placeholders.
+                // Streaming deltas (HandleThinkingDelta/HandleStreamDelta) populate the activity log.
+                else if (itemInfo.Type == "Message")
+                {
+                    // No activity entry here.
+                }
+                else
+                {
+                    string activityType = itemInfo.Type == "Thinking" ? "thinking" : "tool";
+                    AddActivityEntry(task, new ActivityEntry
+                    {
+                        Type = activityType,
+                        Label = itemInfo.Label,
+                        Status = TaskItemStatus.Active,
+                        ItemId = itemInfo.Id
+                    });
+                }
 
                 try { OnTaskItemStarted?.Invoke(task, itemInfo); } catch (Exception e) { Debug.LogException(e); }
                 try { OnTaskUpdated?.Invoke(task); } catch (Exception e) { Debug.LogException(e); }
@@ -307,6 +352,11 @@ namespace MateEngine.Codex
             if (string.IsNullOrEmpty(thinkingText)) return;
             if (!tasks.TryGetValue(turnId, out var task)) return;
 
+            // Keep a copy for UI (and cap to prevent unbounded growth).
+            task.AccumulatedThinking = thinkingText;
+            if (task.AccumulatedThinking != null && task.AccumulatedThinking.Length > MaxAccumulatedThinkingChars)
+                task.AccumulatedThinking = task.AccumulatedThinking.Substring(task.AccumulatedThinking.Length - MaxAccumulatedThinkingChars);
+
             // Find or create a single "thinking" activity entry
             ActivityEntry thinkEntry = null;
             for (int i = task.ActivityLog.Count - 1; i >= 0; i--)
@@ -329,11 +379,49 @@ namespace MateEngine.Codex
                 AddActivityEntry(task, thinkEntry);
             }
 
-            // Show last ~120 chars of thinking
-            if (thinkingText.Length > 120)
-                thinkEntry.Label = thinkingText.Substring(thinkingText.Length - 120);
-            else
-                thinkEntry.Label = thinkingText;
+            // Only update the preview when we have a complete sentence / line boundary.
+            // This avoids showing users a constantly changing half-sentence.
+            string stable = BuildStableThinkingPreviewLabel(task.AccumulatedThinking, PreviewChars);
+            thinkEntry.Label = string.IsNullOrEmpty(stable) ? "Thinking..." : stable;
+
+            FireActivityThrottled(task);
+        }
+
+        public void HandleReasoningDelta(string threadId, string turnId, string delta)
+        {
+            if (string.IsNullOrEmpty(delta)) return;
+            var task = EnsureTask(threadId, turnId);
+            if (task == null) return;
+
+            task.AccumulatedThinking = (task.AccumulatedThinking ?? "") + delta;
+            if (task.AccumulatedThinking.Length > MaxAccumulatedThinkingChars)
+                task.AccumulatedThinking = task.AccumulatedThinking.Substring(task.AccumulatedThinking.Length - MaxAccumulatedThinkingChars);
+
+            // Find or create a single "thinking" activity entry
+            ActivityEntry thinkEntry = null;
+            for (int i = task.ActivityLog.Count - 1; i >= 0; i--)
+            {
+                if (task.ActivityLog[i].Type == "thinking")
+                {
+                    thinkEntry = task.ActivityLog[i];
+                    break;
+                }
+            }
+
+            if (thinkEntry == null)
+            {
+                thinkEntry = new ActivityEntry
+                {
+                    Type = "thinking",
+                    Label = "",
+                    Status = TaskItemStatus.Active
+                };
+                AddActivityEntry(task, thinkEntry);
+            }
+
+            thinkEntry.Status = TaskItemStatus.Active;
+            string stable = BuildStableThinkingPreviewLabel(task.AccumulatedThinking, PreviewChars);
+            thinkEntry.Label = string.IsNullOrEmpty(stable) ? "Thinking..." : stable;
 
             FireActivityThrottled(task);
         }
@@ -343,6 +431,8 @@ namespace MateEngine.Codex
             if (!tasks.TryGetValue(turnId, out var task)) return;
 
             task.AccumulatedResponse = accumulatedText;
+            if (task.AccumulatedResponse != null && task.AccumulatedResponse.Length > MaxAccumulatedResponseChars)
+                task.AccumulatedResponse = task.AccumulatedResponse.Substring(task.AccumulatedResponse.Length - MaxAccumulatedResponseChars);
 
             // Find or create a single "response" activity entry
             ActivityEntry responseEntry = null;
@@ -366,11 +456,8 @@ namespace MateEngine.Codex
                 AddActivityEntry(task, responseEntry);
             }
 
-            // Show last ~120 chars
-            if (accumulatedText.Length > 120)
-                responseEntry.Label = accumulatedText.Substring(accumulatedText.Length - 120);
-            else
-                responseEntry.Label = accumulatedText;
+            responseEntry.Status = TaskItemStatus.Active;
+            responseEntry.Label = Tail(SanitizeOneLine(task.AccumulatedResponse), PreviewChars);
 
             FireActivityThrottled(task);
         }
@@ -530,6 +617,11 @@ namespace MateEngine.Codex
                     label = "bash: " + (cmd.Length > 60 ? cmd.Substring(0, 60) + "..." : cmd);
                     break;
 
+                case "userMessage":
+                    itemType = "UserMessage";
+                    label = ExtractContentText(item);
+                    break;
+
                 case "mcpToolCall":
                     itemType = "McpTool";
                     var server = item["serverName"]?.Value<string>() ?? item["server"]?.Value<string>() ?? "";
@@ -557,7 +649,7 @@ namespace MateEngine.Codex
 
                 case "agentMessage":
                     itemType = "Message";
-                    label = "Responding...";
+                    label = "Agent message";
                     break;
 
                 case "plan":
@@ -573,7 +665,7 @@ namespace MateEngine.Codex
 
                 default:
                     itemType = type;
-                    label = "Working...";
+                    label = string.IsNullOrEmpty(type) ? "Working..." : type;
                     break;
             }
 
@@ -584,6 +676,178 @@ namespace MateEngine.Codex
                 Label = label,
                 Duration = -1f
             };
+        }
+
+        static string Tail(string text, int maxChars)
+        {
+            if (string.IsNullOrEmpty(text)) return "";
+            if (maxChars <= 0) return "";
+            if (text.Length <= maxChars) return text;
+            return text.Substring(text.Length - maxChars);
+        }
+
+        static bool IsSentenceBoundaryAt(string text, int index)
+        {
+            if (string.IsNullOrEmpty(text)) return false;
+            if (index < 0 || index >= text.Length) return false;
+
+            char c = text[index];
+            if (c == '\n' || c == '\r') return true;
+            if (c == '。' || c == '！' || c == '？' || c == '；') return true;
+
+            if (c != '.' && c != '!' && c != '?' && c != ';') return false;
+
+            // Small heuristic: treat ASCII punctuation as sentence boundary only if it is followed by
+            // whitespace / end-of-text (allowing closing quotes / brackets).
+            int j = index + 1;
+            while (j < text.Length)
+            {
+                char n = text[j];
+                if (n == '"' || n == '\'' || n == ')' || n == ']' || n == '}' || n == '\u201D' || n == '\u2019')
+                {
+                    j++;
+                    continue;
+                }
+                break;
+            }
+
+            if (j >= text.Length) return true;
+            return char.IsWhiteSpace(text[j]);
+        }
+
+        static int FindLastSentenceBoundary(string text, int fromIndexInclusive)
+        {
+            if (string.IsNullOrEmpty(text)) return -1;
+            if (fromIndexInclusive >= text.Length) fromIndexInclusive = text.Length - 1;
+            for (int i = fromIndexInclusive; i >= 0; i--)
+            {
+                if (IsSentenceBoundaryAt(text, i))
+                    return i;
+            }
+            return -1;
+        }
+
+        static string BuildStableThinkingPreviewLabel(string rawThinking, int maxChars)
+        {
+            if (string.IsNullOrEmpty(rawThinking)) return "";
+            if (maxChars <= 0) return "";
+
+            int lastBoundary = FindLastSentenceBoundary(rawThinking, rawThinking.Length - 1);
+            if (lastBoundary < 0) return "";
+
+            // If the boundary is a newline, don't include it in the preview.
+            int end = lastBoundary;
+            while (end >= 0 && (rawThinking[end] == '\n' || rawThinking[end] == '\r'))
+                end--;
+            if (end < 0) return "";
+
+            // Show only the last completed sentence / line segment.
+            int prevBoundary = FindLastSentenceBoundary(rawThinking, end - 1);
+            int start = prevBoundary >= 0 ? prevBoundary + 1 : 0;
+            while (start <= end && (rawThinking[start] == '\n' || rawThinking[start] == '\r'))
+                start++;
+            if (start > end) return "";
+
+            string segment = rawThinking.Substring(start, end - start + 1);
+            string sanitized = SanitizeOneLine(segment);
+            return Tail(sanitized, maxChars);
+        }
+
+        static string StripEmojiLikeChars(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return "";
+
+            // TMP fonts used by the Task Monitor are not guaranteed to have emoji glyphs. Since the Task Monitor
+            // is a 1-line preview/debug UI, we aggressively strip emoji-like sequences to avoid "□" squares and
+            // missing-glyph spam in logs.
+            var sb = new StringBuilder(text.Length);
+            for (int i = 0; i < text.Length; i++)
+            {
+                char c = text[i];
+
+                // Drop non-BMP code points (most emoji) represented as surrogate pairs in UTF-16.
+                if (char.IsHighSurrogate(c))
+                {
+                    if (i + 1 < text.Length && char.IsLowSurrogate(text[i + 1]))
+                        i++; // skip the pair
+                    continue;
+                }
+                if (char.IsLowSurrogate(c))
+                    continue;
+
+                // Drop emoji joiners / variation selectors.
+                if (c == '\uFE0E' || c == '\uFE0F' || c == '\u200D' || c == '\u20E3')
+                    continue;
+
+                // Drop many remaining BMP "symbol" emoji (dingbats, misc symbols, etc).
+                // Keep letters/numbers/punctuation so CJK text remains intact.
+                if (CharUnicodeInfo.GetUnicodeCategory(c) == UnicodeCategory.OtherSymbol)
+                    continue;
+
+                sb.Append(c);
+            }
+
+            return sb.ToString();
+        }
+
+        static string SanitizeOneLine(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return "";
+
+            // Hide animation directives from the task monitor preview. They are useful for the avatar,
+            // but look like gibberish in a 1-line UI.
+            int animIdx = text.IndexOf("<!--anim:", StringComparison.Ordinal);
+            if (animIdx >= 0)
+                text = text.Substring(0, animIdx);
+
+            text = StripEmojiLikeChars(text);
+
+            // Collapse whitespace/newlines so it reads well in a 1-line TMP field.
+            var sb = new StringBuilder(text.Length);
+            bool inWs = false;
+            for (int i = 0; i < text.Length; i++)
+            {
+                char c = text[i];
+                if (c == '\r' || c == '\n' || c == '\t')
+                    c = ' ';
+
+                if (char.IsWhiteSpace(c))
+                {
+                    if (inWs) continue;
+                    inWs = true;
+                    sb.Append(' ');
+                }
+                else
+                {
+                    inWs = false;
+                    sb.Append(c);
+                }
+            }
+
+            return sb.ToString().Trim();
+        }
+
+        static string ExtractContentText(JToken item)
+        {
+            if (item == null) return "";
+
+            var direct = item["text"]?.Value<string>() ?? "";
+            if (!string.IsNullOrEmpty(direct))
+                return direct;
+
+            var content = item["content"] as JArray;
+            if (content == null || content.Count == 0)
+                return "";
+
+            var sb = new StringBuilder();
+            foreach (var part in content)
+            {
+                var t = part?["text"]?.Value<string>() ?? "";
+                if (string.IsNullOrEmpty(t)) continue;
+                sb.Append(t);
+            }
+
+            return sb.ToString();
         }
 
         void EnrichCompletedItem(TaskItemInfo info, JToken item)

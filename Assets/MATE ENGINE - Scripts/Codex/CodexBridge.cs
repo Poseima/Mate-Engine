@@ -119,10 +119,12 @@ namespace MateEngine.Codex
 
             // Wire protocol events (unsubscribe first to prevent double-wiring on reconnect)
             protocol.OnStreamDelta -= HandleDelta;
+            protocol.OnReasoningDelta -= HandleReasoningDelta;
             protocol.OnTurnCompleted -= HandleTurnCompleted;
             protocol.OnLoginCompleted -= HandleLoginCompleted;
             protocol.OnError -= HandleProtocolError;
             protocol.OnStreamDelta += HandleDelta;
+            protocol.OnReasoningDelta += HandleReasoningDelta;
             protocol.OnTurnCompleted += HandleTurnCompleted;
             protocol.OnLoginCompleted += HandleLoginCompleted;
             protocol.OnError += HandleProtocolError;
@@ -555,6 +557,14 @@ namespace MateEngine.Codex
                 if (streamBuffer.Length > 0)
                     TaskTracker.HandleStreamDelta(protocol.CurrentTurnId, streamBuffer);
             }
+        }
+
+        void HandleReasoningDelta(string threadId, string turnId, string delta)
+        {
+            if (string.IsNullOrEmpty(delta)) return;
+            if (string.IsNullOrEmpty(turnId)) return;
+
+            TaskTracker.HandleReasoningDelta(threadId, turnId, delta);
         }
 
         void ParseRawBuffer()

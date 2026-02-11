@@ -1,0 +1,53 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 65317dd216bb4f868353b19d4d919753, type: 3}
+  m_Name: TaskMonitorTheme
+  m_EditorClassIdentifier: Assembly-CSharp::MateEngine.Codex.TaskMonitorTheme
+  panelBackground: {fileID: 21300000, guid: a3392610b95f49348a74aea72578d7e8, type: 3}
+  panelShadow: {fileID: 21300000, guid: 1e44e0aae00d52c41b31255ca85fe802, type: 3}
+  panelGlowFrame: {fileID: 0}
+  pillBackground: {fileID: 21300000, guid: 1e735de82ee00bd45b9d92b5675bd8e5, type: 3}
+  cardBackground: {fileID: 21300000, guid: 18d565a4d03520248857f55112ee9ebe, type: 3}
+  iconCollapse: {fileID: 21300000, guid: 4f7304f41dd6fc840947f8e657dda0f3, type: 3}
+  iconClose: {fileID: 21300000, guid: b62baa8522ecbba469978a883c231102, type: 3}
+  iconCancel: {fileID: 21300000, guid: b62baa8522ecbba469978a883c231102, type: 3}
+  iconCheck: {fileID: 21300000, guid: 6a331416c2646eb4eaa51454dece7444, type: 3}
+  iconRefresh: {fileID: 21300000, guid: 07ce102133c1ef146aac2dab35943f97, type: 3}
+  font: {fileID: 11400000, guid: e24cbbc373ce4848affb8ce0bb20552e, type: 2}
+  panelTint: {r: 0.12, g: 0.12, b: 0.2, a: 0.92}
+  cardTint: {r: 0.1, g: 0.1, b: 0.16, a: 0.78}
+  pillTint: {r: 0.14, g: 0.12, b: 0.22, a: 0.95}
+  shadowTint: {r: 0, g: 0, b: 0, a: 0.35}
+  glowTint: {r: 1, g: 1, b: 1, a: 0.18}
+  text: {r: 1, g: 1, b: 1, a: 1}
+  textDim: {r: 0.7, g: 0.7, b: 0.8, a: 1}
+  toolAccent: {r: 0.7019608, g: 0.63529414, b: 0.47843137, a: 1}
+  workingAccent: {r: 0.4862745, g: 0.654902, b: 0.7607843, a: 1}
+  thinkingAccent: {r: 0.64705884, g: 0.60784316, b: 0.79607844, a: 1}
+  toolCallAccent: {r: 0.7019608, g: 0.63529414, b: 0.47843137, a: 1}
+  cancelAccent: {r: 0.7607843, g: 0.49019608, b: 0.42745098, a: 1}
+  chipBg: {r: 0, g: 0, b: 0, a: 0.2}
+  iconNormal: {r: 1, g: 1, b: 1, a: 0.9}
+  iconHover: {r: 1, g: 1, b: 1, a: 1}
+  iconPressed: {r: 1, g: 1, b: 1, a: 0.65}
+  iconDanger: {r: 0.7607843, g: 0.49019608, b: 0.42745098, a: 1}
+  headerHeight: 22
+  cardAccentWidth: 3
+  iconSize: 16
+  chipHeight: 18
+  panelGlowPulseSpeed: 2.5
+  panelGlowPulseAmplitude: 0.35
+  activityFlashDuration: 0.22
+  activityFlashTint: {r: 1, g: 1, b: 1, a: 1}
+  panelShadowOffset: {x: 8, y: -8}
+  panelShadowPadding: {x: 36, y: 36}
+  panelGlowPadding: {x: 32, y: 32}

@@ -1,5 +1,7 @@
-﻿using UnityEngine;
+﻿using System.Collections.Generic;
+using UnityEngine;
 using UnityEngine.UI;
+using UnityEngine.EventSystems;
 using Kirurobo; 
 public class AvatarScaleController : MonoBehaviour
 {
@@ -16,6 +18,11 @@ public class AvatarScaleController : MonoBehaviour
     private Transform modelRoot;
     private GameObject currentModel;
     private AvatarAnimatorController controller;
+
+    // When the pointer is over the Task Monitor UI, mouse wheel should scroll the monitor
+    // without resizing the avatar.
+    static Transform cachedTaskMonitorCanvas;
+    static readonly List<RaycastResult> uiRaycastHits = new();
 
     void Start()
     {
@@ -71,8 +78,12 @@ public class AvatarScaleController : MonoBehaviour
         if (controller != null && controller.isDragging)
             return;
 
-
+        // Only apply scroll-to-scale when we're not hovering the Task Monitor.
+        // We keep the rest of the Update() logic (smoothing, slider sync) intact.
         float scroll = Input.mouseScrollDelta.y;
+        if (scroll != 0f && IsPointerOverTaskMonitor())
+            scroll = 0f;
+
         if (scroll != 0f)
         {
             targetSize = Mathf.Clamp(
@@ -97,5 +108,41 @@ public class AvatarScaleController : MonoBehaviour
             SaveLoadHandler.Instance.SaveToDisk();
             SaveLoadHandler.ApplyAllSettingsToAllAvatars();
         }
+    }
+
+    static bool IsPointerOverTaskMonitor()
+    {
+        if (EventSystem.current == null)
+            return false;
+
+        if (cachedTaskMonitorCanvas == null)
+        {
+            var canvasGo = GameObject.Find("TaskMonitorCanvas");
+            if (canvasGo == null)
+                return false;
+            cachedTaskMonitorCanvas = canvasGo.transform;
+        }
+
+        // If the monitor canvas is disabled/hidden (e.g., BigScreen mode), don't block scroll-to-scale.
+        var canvas = cachedTaskMonitorCanvas.GetComponent<Canvas>();
+        if (canvas != null && !canvas.enabled)
+            return false;
+
+        var ped = new PointerEventData(EventSystem.current)
+        {
+            position = Input.mousePosition
+        };
+
+        uiRaycastHits.Clear();
+        EventSystem.current.RaycastAll(ped, uiRaycastHits);
+
+        for (int i = 0; i < uiRaycastHits.Count; i++)
+        {
+            var go = uiRaycastHits[i].gameObject;
+            if (go != null && go.transform.IsChildOf(cachedTaskMonitorCanvas))
+                return true;
+        }
+
+        return false;
     }
 }

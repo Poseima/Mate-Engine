@@ -26,6 +26,7 @@ namespace MateEngine.Codex
 
         // Public events (invoked on main thread via Pump)
         public event Action<string> OnStreamDelta;          // item/agentMessage/delta → delta text
+        public event Action<string, string, string> OnReasoningDelta; // threadId, turnId, delta text
         public event Action<string> OnTurnCompleted;        // turn/completed → threadId
         public event Action<string> OnTurnStarted;          // turn/started → turnId
         public event Action<bool, string> OnLoginCompleted; // account/login/completed
@@ -49,6 +50,11 @@ namespace MateEngine.Codex
         readonly object startedTurnsLock = new();
         readonly HashSet<string> startedTurns = new();
 
+        // Some providers emit both v2 streaming deltas (item/agentMessage/delta) and raw codex/event deltas.
+        // Deduplicate by picking the first source we see per itemId.
+        readonly object agentDeltaSourceLock = new();
+        readonly Dictionary<string, bool> agentDeltaSourceIsV2ByItemId = new();
+
         // ── Lifecycle ──────────────────────────────────────────────
 
         public void Start(string binaryPath, Dictionary<string, string> envVars)
@@ -58,6 +64,7 @@ namespace MateEngine.Codex
             // New process/session: forget any prior synthetic turn starts.
             CurrentTurnId = null;
             lock (startedTurnsLock) startedTurns.Clear();
+            lock (agentDeltaSourceLock) agentDeltaSourceIsV2ByItemId.Clear();
 
             var psi = new ProcessStartInfo
             {
@@ -120,6 +127,7 @@ namespace MateEngine.Codex
 
             CurrentTurnId = null;
             lock (startedTurnsLock) startedTurns.Clear();
+            lock (agentDeltaSourceLock) agentDeltaSourceIsV2ByItemId.Clear();
         }
 
         // ── Send request (expects response) ────────────────────────
@@ -256,9 +264,11 @@ namespace MateEngine.Codex
                     var deltaThreadId = @params?["threadId"]?.Value<string>() ?? @params?["thread_id"]?.Value<string>() ?? "";
                     var deltaTurnId = @params?["turnId"]?.Value<string>() ?? @params?["turn_id"]?.Value<string>() ?? "";
                     EnsureTurnStarted(deltaThreadId, deltaTurnId);
+                    var v2ItemId = @params?["itemId"]?.Value<string>() ?? @params?["item_id"]?.Value<string>() ?? "";
 
                     var delta = @params?["delta"]?.Value<string>() ?? "";
-                    Enqueue(() => OnStreamDelta?.Invoke(delta));
+                    if (ShouldAcceptAgentDelta(v2ItemId, isV2: true))
+                        Enqueue(() => OnStreamDelta?.Invoke(delta));
                     break;
 
                 case "turn/completed":
@@ -322,6 +332,46 @@ namespace MateEngine.Codex
                     Enqueue(() => OnError?.Invoke(rawErr));
                     break;
 
+                case "codex/event/reasoning_content_delta":
+                case "codex/event/agent_reasoning_delta":
+                {
+                    var msg = @params?["msg"];
+                    var reasoningDelta = msg?["delta"]?.Value<string>() ?? "";
+                    if (string.IsNullOrEmpty(reasoningDelta))
+                        break;
+
+                    var threadId = msg?["thread_id"]?.Value<string>()
+                        ?? msg?["threadId"]?.Value<string>()
+                        ?? @params?["conversationId"]?.Value<string>()
+                        ?? "";
+                    var turnId = msg?["turn_id"]?.Value<string>() ?? msg?["turnId"]?.Value<string>() ?? "";
+
+                    EnsureTurnStarted(threadId, turnId);
+                    Enqueue(() => OnReasoningDelta?.Invoke(threadId, turnId, reasoningDelta));
+                    break;
+                }
+
+                case "codex/event/agent_message_content_delta":
+                {
+                    var msg = @params?["msg"];
+                    var contentDelta = msg?["delta"]?.Value<string>() ?? "";
+                    if (string.IsNullOrEmpty(contentDelta))
+                        break;
+
+                    var rawItemId = msg?["item_id"]?.Value<string>() ?? msg?["itemId"]?.Value<string>() ?? "";
+                    var threadId = msg?["thread_id"]?.Value<string>()
+                        ?? msg?["threadId"]?.Value<string>()
+                        ?? @params?["conversationId"]?.Value<string>()
+                        ?? "";
+                    var turnId = msg?["turn_id"]?.Value<string>() ?? msg?["turnId"]?.Value<string>() ?? "";
+
+                    EnsureTurnStarted(threadId, turnId);
+
+                    if (ShouldAcceptAgentDelta(rawItemId, isV2: false))
+                        Enqueue(() => OnStreamDelta?.Invoke(contentDelta));
+                    break;
+                }
+
                 case "item/started":
                 {
                     var isThreadId = @params?["threadId"]?.Value<string>() ?? @params?["thread_id"]?.Value<string>() ?? "";
@@ -377,7 +427,6 @@ namespace MateEngine.Codex
                 case "account/rateLimits/updated":
                 case "turn/diff/updated":
                 case "codex/event/agent_message":
-                case "codex/event/agent_message_content_delta":
                 case "codex/event/agent_message_delta":
                 case "codex/event/item_started":
                 case "codex/event/item_completed":
@@ -387,8 +436,6 @@ namespace MateEngine.Codex
                 case "codex/event/mcp_startup_complete":
                 case "codex/event/deprecation_notice":
                 case "codex/event/warning":
-                case "codex/event/reasoning_content_delta":
-                case "codex/event/agent_reasoning_delta":
                 case "codex/event/agent_reasoning_section_break":
                 case "codex/event/agent_reasoning":
                 case "deprecationNotice":
@@ -397,6 +444,26 @@ namespace MateEngine.Codex
                 default:
                     Enqueue(() => Debug.Log("[Codex] Notification: " + method));
                     break;
+            }
+        }
+
+        bool ShouldAcceptAgentDelta(string itemId, bool isV2)
+        {
+            if (string.IsNullOrEmpty(itemId))
+                return true; // can't dedupe; accept
+
+            lock (agentDeltaSourceLock)
+            {
+                if (agentDeltaSourceIsV2ByItemId.TryGetValue(itemId, out bool existingIsV2))
+                    return existingIsV2 == isV2;
+
+                agentDeltaSourceIsV2ByItemId[itemId] = isV2;
+
+                // Prevent unbounded growth in long sessions.
+                if (agentDeltaSourceIsV2ByItemId.Count > 512)
+                    agentDeltaSourceIsV2ByItemId.Clear();
+
+                return true;
             }
         }
 
