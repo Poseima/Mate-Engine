@@ -15,6 +15,7 @@ namespace MateEngine.Codex
     {
         Process process;
         StreamWriter stdin;
+        readonly object stdinLock = new();
         Thread readerThread;
         volatile bool running;
 
@@ -23,6 +24,10 @@ namespace MateEngine.Codex
 
         // Events marshalled to main thread via queues
         readonly ConcurrentQueue<Action> mainThreadQueue = new();
+
+        // Throttle for approval polling (avoid 60fps filesystem scans)
+        DateTime nextApprovalPoll = DateTime.MinValue;
+        static readonly TimeSpan ApprovalPollInterval = TimeSpan.FromMilliseconds(500);
 
         // Public events (invoked on main thread via Pump)
         public event Action<string> OnStreamDelta;          // item/agentMessage/delta → delta text
@@ -41,6 +46,10 @@ namespace MateEngine.Codex
         public event Action<string, string> OnThreadNameUpdated;            // threadId, name
 
         public bool IsRunning => running && process != null && !process.HasExited;
+
+        // Delegate for approval routing context (set by CodexBridge)
+        // Returns (avatarId, displayName, groupFolder, chatJid) for the current context
+        public Func<(string avatarId, string displayName, string groupFolder, string chatJid)> GetAvatarContext { get; set; }
 
         // Current turn ID (tracked for interrupt)
         public string CurrentTurnId { get; private set; }
@@ -151,7 +160,7 @@ namespace MateEngine.Codex
 
         // ── Send response to a server-to-client request ────────────
 
-        public void SendResponse(string id, object result)
+        public void SendResponse(object id, object result)
         {
             var resp = new { id, result };
             string json = JsonConvert.SerializeObject(resp, Formatting.None,
@@ -163,7 +172,7 @@ namespace MateEngine.Codex
         {
             try
             {
-                stdin.WriteLine(json);
+                lock (stdinLock) { stdin.WriteLine(json); }
             }
             catch (Exception e)
             {
@@ -180,6 +189,37 @@ namespace MateEngine.Codex
                 try { action(); }
                 catch (Exception e) { Debug.LogException(e); }
             }
+
+            // Poll for WhatsApp approval responses (throttled)
+            var now = DateTime.UtcNow;
+            if (now >= nextApprovalPoll)
+            {
+                nextApprovalPoll = now + ApprovalPollInterval;
+                ApprovalForwarder.PollResponses((codexRequestId, decision) =>
+                {
+                    SendResponse(codexRequestId, new ApprovalResponse { decision = decision });
+                });
+            }
+        }
+
+        public int CancelPendingApprovalsForCurrentContext()
+        {
+            var ctx = GetAvatarContext?.Invoke() ?? default;
+            string chatJid = string.IsNullOrEmpty(ctx.chatJid) ? null : ctx.chatJid;
+
+            Action<JToken, string> sendApprovalResponse = (codexRequestId, decision) =>
+            {
+                SendResponse(codexRequestId, new ApprovalResponse { decision = decision });
+            };
+
+            int resolved = ApprovalForwarder.CancelPendingApprovals(sendApprovalResponse, chatJid);
+            if (resolved == 0 && !string.IsNullOrEmpty(chatJid))
+            {
+                // Fallback: if context chat mapping drifted, avoid leaving any approval requests hanging.
+                resolved = ApprovalForwarder.CancelPendingApprovals(sendApprovalResponse);
+            }
+
+            return resolved;
         }
 
         // ── Background reader ──────────────────────────────────────
@@ -236,22 +276,36 @@ namespace MateEngine.Codex
             Enqueue(() => Debug.Log("[Codex] Unknown line: " + line));
         }
 
-        void HandleServerRequest(string id, string method, JToken @params)
+        void HandleServerRequest(JToken id, string method, JToken @params)
         {
-            // Auto-accept all approval requests (chat mode doesn't execute code)
-            switch (method)
+            // Enqueue to main thread so delegate (GetAvatarContext) safely accesses Unity objects.
+            Enqueue(() =>
             {
-                case "item/commandExecution/requestApproval":
-                case "item/fileChange/requestApproval":
-                    SendResponse(id, new ApprovalResponse());
-                    break;
+                switch (method)
+                {
+                    case "item/commandExecution/requestApproval":
+                    case "item/fileChange/requestApproval":
+                        var ctx = GetAvatarContext?.Invoke() ?? default;
+                        if (!string.IsNullOrEmpty(ctx.chatJid))
+                        {
+                            // Active WhatsApp session — forward as poll
+                            ApprovalForwarder.ForwardApproval(
+                                id, method, @params,
+                                ctx.avatarId, ctx.displayName, ctx.groupFolder, ctx.chatJid);
+                        }
+                        else
+                        {
+                            // No WhatsApp context — auto-accept
+                            SendResponse(id, new ApprovalResponse());
+                        }
+                        break;
 
-                default:
-                    // Unknown server request — send empty response
-                    SendResponse(id, new { });
-                    Enqueue(() => Debug.Log("[Codex] Auto-responded to server request: " + method));
-                    break;
-            }
+                    default:
+                        SendResponse(id, new { });
+                        Debug.Log("[Codex] Auto-responded to server request: " + method);
+                        break;
+                }
+            });
         }
 
         void HandleNotification(string method, JToken @params)
@@ -283,8 +337,7 @@ namespace MateEngine.Codex
                         var resolvedTurnId = !string.IsNullOrEmpty(completedTurnId) ? completedTurnId : CurrentTurnId;
                         CurrentTurnId = null;
                         OnTurnCompleted?.Invoke(tid);
-                        if (!string.IsNullOrEmpty(resolvedTurnId))
-                            OnTurnCompletedFull?.Invoke(tid, resolvedTurnId);
+                        OnTurnCompletedFull?.Invoke(tid, resolvedTurnId ?? "");
                     });
                     break;
 
@@ -310,18 +363,13 @@ namespace MateEngine.Codex
                 // ── Raw codex/event format (Chat Completions / aggregated) ─
 
                 case "codex/event/task_complete":
-                    // Fires for all providers; only act on it if the v2 turn/completed
-                    // didn't already arrive (i.e. CurrentTurnId is still set).
                     var rawCompTid = @params?["conversationId"]?.Value<string>() ?? "";
                     Enqueue(() =>
                     {
-                        if (CurrentTurnId != null)
-                        {
-                            var completed = CurrentTurnId;
-                            CurrentTurnId = null;
-                            OnTurnCompleted?.Invoke(rawCompTid);
-                            OnTurnCompletedFull?.Invoke(rawCompTid, completed);
-                        }
+                        var completed = CurrentTurnId ?? "";
+                        CurrentTurnId = null;
+                        OnTurnCompleted?.Invoke(rawCompTid);
+                        OnTurnCompletedFull?.Invoke(rawCompTid, completed);
                     });
                     break;
 

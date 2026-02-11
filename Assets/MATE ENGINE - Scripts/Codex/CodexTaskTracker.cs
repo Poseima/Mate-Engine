@@ -186,7 +186,21 @@ namespace MateEngine.Codex
         public void HandleTurnCompleted(string threadId, string turnId)
         {
             if (!tasks.TryGetValue(turnId, out var task))
-                return;
+            {
+                // Fallback: find most recent active task on this thread
+                if (!string.IsNullOrEmpty(threadId))
+                {
+                    for (int i = taskOrder.Count - 1; i >= 0; i--)
+                    {
+                        if (tasks.TryGetValue(taskOrder[i], out var t) && t.ThreadId == threadId && t.Status == TaskStatus.Active)
+                        {
+                            task = t;
+                            break;
+                        }
+                    }
+                }
+                if (task == null) return;
+            }
 
             if (task.Status == TaskStatus.Cancelled)
                 return; // already cancelled, don't overwrite

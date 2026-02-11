@@ -129,6 +129,22 @@ namespace MateEngine.Codex
             protocol.OnLoginCompleted += HandleLoginCompleted;
             protocol.OnError += HandleProtocolError;
 
+            // Wire approval context delegate for WhatsApp human-in-the-loop
+            protocol.GetAvatarContext = () =>
+            {
+                var ipc = WhatsAppIPCBridge.Instance;
+                var cfg = AvatarConfigLoader.Instance?.GetActiveAvatarConfig();
+                return (
+                    cfg?.avatarId ?? "",
+                    cfg?.displayName ?? "",
+                    ipc?.CurrentGroupFolder ?? "",
+                    ipc?.CurrentChatJid ?? ""
+                );
+            };
+
+            // Initialize approval forwarder IPC dirs
+            ApprovalForwarder.Initialize();
+
             // Wire task tracker events
             protocol.OnTurnStartedFull -= TaskTracker.HandleTurnStarted;
             protocol.OnTurnCompletedFull -= TaskTracker.HandleTurnCompleted;
@@ -622,6 +638,7 @@ namespace MateEngine.Codex
 
         public void CancelCurrentTurn()
         {
+            protocol.CancelPendingApprovalsForCurrentContext();
             if (!string.IsNullOrEmpty(protocol.CurrentTurnId))
                 TaskTracker.CancelTask(protocol.CurrentTurnId);
             InterruptTurn();

@@ -35,6 +35,17 @@ namespace MateEngine.Codex
     {
         public string model;
         public string modelProvider;
+
+        /// <summary>
+        /// Approval policy for tool use / file changes (kebab-case, Codex protocol).
+        /// Valid values:
+        ///   "never"      - Auto-execute everything, no approval requests generated (default)
+        ///   "on-request" - Always ask for approval before executing commands/file changes
+        ///   "on-failure" - Ask for approval only when a command fails
+        ///   "untrusted"  - Ask for approval unless command is in trusted list
+        /// When set to anything other than "never" and a WhatsApp session is active,
+        /// approval requests are forwarded as WhatsApp polls automatically.
+        /// </summary>
         public string approvalPolicy = "never";
 
         /// <summary>

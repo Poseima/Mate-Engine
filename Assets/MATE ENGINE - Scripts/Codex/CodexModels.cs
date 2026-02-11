@@ -288,7 +288,7 @@ namespace MateEngine.Codex
         /// Check if line is a server-to-client request (has id + method).
         /// These are approval requests that need a response.
         /// </summary>
-        public static bool IsServerRequest(string line, out string id, out string method, out JToken @params)
+        public static bool IsServerRequest(string line, out JToken id, out string method, out JToken @params)
         {
             id = null;
             method = null;
@@ -298,7 +298,7 @@ namespace MateEngine.Codex
                 var obj = JObject.Parse(line);
                 if (obj["id"] != null && obj["method"] != null)
                 {
-                    id = obj["id"].Value<string>();
+                    id = obj["id"];
                     method = obj["method"].Value<string>();
                     @params = obj["params"];
                     return true;

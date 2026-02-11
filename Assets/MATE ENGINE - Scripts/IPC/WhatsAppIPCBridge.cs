@@ -25,6 +25,13 @@ public class WhatsAppIPCBridge : MonoBehaviour
         public string timestamp;
     }
 
+    public static WhatsAppIPCBridge Instance { get; private set; }
+
+    /// <summary>Current group folder being processed (for approval context)</summary>
+    public string CurrentGroupFolder => currentGroupFolder;
+    /// <summary>Current chat JID being processed (for approval context)</summary>
+    public string CurrentChatJid => currentChatJid;
+
     [Header("Toggle")]
     public bool enableWhatsAppBridge = true;
 
@@ -51,6 +58,8 @@ public class WhatsAppIPCBridge : MonoBehaviour
 
     void Awake()
     {
+        Instance = this;
+
         string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         string baseDir = Path.Combine(home, ".mate-engine", "ipc", "whatsapp");
         requestsDir = Path.Combine(baseDir, "requests");
@@ -70,6 +79,11 @@ public class WhatsAppIPCBridge : MonoBehaviour
         // Cleanup stale files on startup
         CleanupStaleFiles(requestsDir, TimeSpan.FromMinutes(5));
         CleanupStaleFiles(responsesDir, TimeSpan.FromMinutes(5));
+
+        // Also cleanup approval IPC dirs
+        string approvalBase = Path.Combine(baseDir, "approvals");
+        CleanupStaleFiles(Path.Combine(approvalBase, "requests"), TimeSpan.FromMinutes(5));
+        CleanupStaleFiles(Path.Combine(approvalBase, "responses"), TimeSpan.FromMinutes(5));
     }
 
     void Start()
@@ -91,6 +105,7 @@ public class WhatsAppIPCBridge : MonoBehaviour
         try { pollThread?.Join(2000); } catch { }
         pollThread = null;
         configLoader?.StopWatching();
+        if (Instance == this) Instance = null;
     }
 
     void PollLoop()
